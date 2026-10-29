@@ -1,0 +1,155 @@
+# CI complète (à chaque merge request) + déploiement automatique sur Cloudflare Workers (branche main).
+#
+# Variables CI/CD à définir (Settings → CI/CD → Variables, "Masked" + "Protected") pour le déploiement :
+#   CLOUDFLARE_API_TOKEN  (modèle « Edit Cloudflare Workers » + permission D1 Edit)
+#   CLOUDFLARE_ACCOUNT_ID
+# Facultatif si le runner est derrière un proxy TLS (ex. Zscaler) : NODE_EXTRA_CA_CERTS.
+
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+stages:
+  - quality
+  - test
+  - deploy
+
+# Une seule pipeline par push : merge request ou branche main (pas de doublon branche + MR).
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+default:
+  image: node:22
+  interruptible: true
+  retry:
+    max: 1
+    when: runner_system_failure
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  npm_config_audit: "false"
+  npm_config_fund: "false"
+
+.install: &install
+  - npm ci --prefer-offline
+
+# ───────────── quality : contrôles statiques, tests, build (en parallèle) ─────────────
+
+typecheck:
+  stage: quality
+  script:
+    - *install
+    - npm run typecheck
+
+lint:
+  stage: quality
+  script:
+    - *install
+    - npm run lint
+
+unit-tests:
+  stage: quality
+  script:
+    - *install
+    - npm run test -- --reporter=default --reporter=junit --outputFile.junit=junit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+
+build:
+  stage: quality
+  script:
+    - *install
+    - npm run build
+
+# Échoue si le schéma Drizzle (worker/db/schema.ts) a changé sans migration committée.
+migrations-drift:
+  stage: quality
+  script:
+    - *install
+    - npx drizzle-kit generate
+    - |
+      if [ -n "$(git status --porcelain drizzle)" ]; then
+        echo "Le schéma diffère des migrations : lancez 'npm run db:generate' et committez le dossier drizzle/."
+        git status --porcelain drizzle
+        exit 1
+      fi
+
+# Vulnérabilités connues des dépendances de production (informatif : n'empêche pas le merge).
+dependency-audit:
+  stage: quality
+  allow_failure: true
+  script:
+    - npm audit --omit=dev --audit-level=high
+
+# ───────────── test : parcours navigateur + accessibilité (build de production) ─────────────
+
+# L'image Playwright doit suivre la version de playwright-core du package-lock.json.
+# Job informatif au départ (allow_failure) : retirer cette ligne une fois la pipeline stable.
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.64.1-noble
+  allow_failure: true
+  timeout: 20m
+  variables:
+    E2E_ADMIN_PASSWORD: "ci-e2e-password-2026"
+    E2E_SHOTS: "$CI_PROJECT_DIR/e2e-shots"
+  script:
+    - *install
+    - mkdir -p "$E2E_SHOTS"
+    # Secrets éphémères propres au job ; le mot de passe admin de test n'a aucune valeur hors CI.
+    - |
+      printf "ADMIN_PASSWORD_HASH='%s'\nSESSION_SECRET=%s\n" \
+        "$(npm run --silent admin:hash -- "$E2E_ADMIN_PASSWORD")" \
+        "$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))")" > .dev.vars
+    - npm run db:migrate:local
+    - npm run db:seed:local
+    - npm run build
+    # Build de production (CSP active) : parcours invité/admin + audit axe.
+    - npx vite preview --port 4173 > preview.log 2>&1 &
+    - echo $! > preview.pid
+    - timeout 90 sh -c 'until node -e "fetch(\"http://localhost:4173\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"; do sleep 1; done'
+    - npm run e2e -- http://localhost:4173
+    - npm run a11y -- http://localhost:4173
+    - kill "$(cat preview.pid)"
+    # Serveur de développement (sans CSP) : le test billetterie rasterise des images blob.
+    - npx vite --port 5173 > dev.log 2>&1 &
+    - timeout 90 sh -c 'until node -e "fetch(\"http://localhost:5173\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"; do sleep 1; done'
+    - npm run e2e:tickets -- http://localhost:5173
+  after_script:
+    - tail -n 40 preview.log dev.log 2>/dev/null || true
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - e2e-shots/
+      - preview.log
+      - dev.log
+
+# Détection de secrets (template GitLab) : exécutée dans le stage "test".
+secret_detection:
+  stage: test
+
+# ───────────── deploy : uniquement sur main, après succès de toute la pipeline ─────────────
+
+deploy:
+  stage: deploy
+  interruptible: false
+  environment:
+    name: production
+  resource_group: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - *install
+    - npm run build
+    - npx wrangler d1 migrations apply nahe-db --remote
+    - npx wrangler deploy
