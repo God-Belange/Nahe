@@ -1,6 +1,6 @@
 # Nahe? — Le prochain rendez-vous est ici.
 
-Application web pour organiser des événements privés entre amis : publication d'événements, invitation par lien (WhatsApp), réservation **sans compte**, paiement manuel par **Wero** ou **PayPal.Me**, suivi des participants et des encaissements, et **billetterie à QR codes** (un billet par place, envoi par e-mail, contrôle d'entrée par scan).
+Application web pour organiser des événements privés entre amis : publication d'événements, invitation par lien (WhatsApp), réservation **sans compte**, paiement manuel par **Wero**, **PayPal.Me** ou **Revolut.me**, suivi des participants et des encaissements, et **billetterie à QR codes** (un billet par place, envoi par e-mail, contrôle d'entrée par scan).
 
 Coût fixe : **0 €/mois** (offres gratuites Cloudflare). Spécification : [SPEC.md](SPEC.md). Avancement : [PROGRESS.md](PROGRESS.md).
 
@@ -59,14 +59,16 @@ Aucun secret n'est présent côté frontend ni dans le dépôt. En production : 
 ## Utilisation
 
 1. `/admin/login` : connexion organisateur.
-2. **Paiements** : renseigner les instructions Wero (et éventuellement le chemin du QR code) et le lien PayPal.Me. Sans moyen de paiement configuré, un événement payant ne peut pas être réservé.
-3. **Événements** : créer, publier, copier le lien d'invitation / partager sur WhatsApp. Un événement `public` est listé sur l'accueil ; un événement `private` n'est accessible que par son lien secret `/i/<jeton>`.
-4. L'invité réserve, choisit Wero ou PayPal, et conserve son **lien de suivi** `/r/<jeton>` (aucun e-mail n'est envoyé).
+2. **Paiements** : renseigner les instructions Wero, le QR code (envoyé depuis l'admin) et, si besoin, l'e-mail ou le numéro Wero (copiable en un clic par l'invité ; Wero ne permet pas de pré-remplir via un lien), le lien PayPal.Me et le lien Revolut.me. Sans moyen de paiement configuré, un événement payant ne peut pas être réservé.
+3. **Événements** : créer, publier, copier le lien d'invitation / partager via les réseaux. Un événement `public` est listé sur l'accueil ; un événement `private` n'est accessible que par son lien secret `/i/<jeton>`.
+4. L'invité réserve, choisit Wero, PayPal ou Revolut, et conserve son **lien de suivi** `/r/<jeton>` (il peut y changer de moyen de paiement tant que la réservation est en attente) (aucun e-mail n'est envoyé).
 5. **Réservations** : l'organisateur vérifie le paiement dans son application, puis confirme manuellement. Le bouton « J'ai payé » de l'invité n'est qu'un signalement.
 
 ### Images
 
-Pas d'upload : déposer les fichiers dans `public/images/` (ex. `public/images/barbecue.jpg`), puis saisir `/images/barbecue.jpg` dans l'admin (couverture d'événement ou QR code Wero) et redéployer.
+Couverture d'événement et QR code Wero : dans l'admin, « Choisir une image » ouvre la galerie (ou l'appareil photo) du téléphone. L'image est réduite dans le navigateur puis stockée dans D1 (table `images`, 1 Mo max, sans service payant) ; les images devenues inutiles sont purgées par la tâche quotidienne. Nécessite d'appliquer les migrations `0003_images`, `0004_revolut_me_url`, `0005_wero_url`, `0006_reservation_guests` et `0007_wero_contact` (`npm run db:migrate:remote`).
+
+Alternative : déposer le fichier dans `public/images/` (ex. `public/images/barbecue.jpg`), saisir `/images/barbecue.jpg` dans l'admin et redéployer.
 
 ## Billetterie et contrôle d'entrée
 
@@ -92,7 +94,7 @@ Pas d'upload : déposer les fichiers dans `public/images/` (ex. `public/images/b
 - **Montants** en centimes entiers, figés à la création de la réservation.
 - **Événement gratuit** : réservation directement `confirmed`.
 - **Rétention** : le Cron quotidien (03:00 UTC) anonymise les réservations 6 mois après la fin de l'événement et invalide leur lien de suivi.
-- Les virements entre proches (Wero, PayPal) ne doivent être utilisés que lorsque l'opération est éligible selon les conditions de ces services.
+- Les virements entre proches (Wero, PayPal, Revolut) ne doivent être utilisés que lorsque l'opération est éligible selon les conditions de ces services.
 
 ## Sécurité
 

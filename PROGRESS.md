@@ -51,7 +51,13 @@ Aucun R2, aucun service payant.
 
 ## Décisions et ajouts par rapport à la spec
 
+- Horaires affichés « Samedi 14 novembre, de 19h à 2h » (jour de début + heures, sans date de fin ; deux jours indiqués seulement au-delà de 24 h), via `shared/schedule.ts` (site, e-mail, message WhatsApp).
+- L'adresse est un lien Google Maps (`shared/maps.ts`).
+- Lieu = nom (`events.location`) + adresse facultative (`events.address`), affichés nom puis adresse partout (cartes, page événement, réservation, suivi, billet, e-mail, texte d'invitation WhatsApp).
+- Option par événement `events.show_remaining` (défaut : affiché) : décochée, le compteur de places restantes est masqué côté invités, « Complet » reste affiché. Le compteur reste visible côté admin. Migration `0002_event_address_show_remaining`.
 - Billets : jeton = identifiant + HMAC (non stocké) ; le QR encode `…/admin/scan?t=<jeton>` ; la consultation d'un billet n'a aucun effet de bord, la validation est une action explicite.
+- Photo de couverture choisie depuis la galerie : `POST /api/admin/images` (corps binaire, signature vérifiée, 1 Mo max) → table D1 `images` (migration `0003_images`, base64), servie par `GET /api/images/:id` (cache immutable). Réduction JPEG côté navigateur (`src/lib/image.ts`), composant `CoverImageField`. Purge des images orphelines (> 24 h) dans la maintenance quotidienne. Le QR Wero utilise le même composant d'envoi.
+- Revolut ajouté comme 3e moyen de paiement manuel : `payment_settings.revolut_me_url` (migration `0004_revolut_me_url`), domaine `revolut.me` uniquement (`shared/revolut.ts`), bouton « Ouvrir Revolut » sur la page de suivi. Montant non pré-rempli (format non vérifié), affiché à côté du bouton.
 - E-mail attendu dans la requête de confirmation (réponse `ticketsEmail`) pour informer l'organisateur ; un échec n'annule rien.
 
 - Colonnes ajoutées : `events.max_per_booking` (max par réservation configurable), `reservations.expired_at` et `anonymized_at` (horodatage des transitions, rétention 6 mois).
@@ -64,3 +70,6 @@ Aucun R2, aucun service payant.
 ## Reste à faire (nécessite le propriétaire du compte)
 
 Voir la section « Déploiement » du README : compte Cloudflare, `wrangler login`, `d1 create`, `database_id`, migrations distantes, 2 secrets, `npm run deploy`. Aucun déploiement n'a été effectué.
+
+- Contact Wero optionnel (e-mail ou numéro copiable ; colonne `wero_contact`, migrations `0005_wero_url` puis `0007_wero_contact` qui la renomme) et changement de moyen de paiement par l'invité tant que la réservation est en attente (`POST /api/reservations/:token/payment-method`, délai inchangé, « J'ai payé » réinitialisé). Tests ajoutés ; `npm run check` OK (181 tests).
+- Nom et prénom obligatoires pour chaque place dès 2 places (`guests`, migration `0006_reservation_guests`) : validation partagée (`reservationInputSchema`), formulaire de réservation, nom du porteur sur chaque billet / scan / e-mail / suivi / admin / CSV. Tests ajoutés ; `npm run check` OK.

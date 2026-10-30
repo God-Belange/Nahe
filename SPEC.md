@@ -12,7 +12,7 @@ Nahe est une application web pour organiser des événements privés entre amis 
 - Créer et publier un événement en quelques minutes.
 - Partager un lien d'invitation (WhatsApp en priorité).
 - Permettre aux invités de réserver **sans compte**.
-- Proposer deux moyens de paiement manuels : **Wero** et **PayPal**.
+- Proposer trois moyens de paiement manuels : **Wero**, **PayPal** et **Revolut**.
 - Suivre participants, places et paiements.
 - **Émettre un billet nominatif avec QR code par place** après confirmation du paiement, l'envoyer par e-mail, et **contrôler les entrées par scan** (un billet = une seule entrée).
 - **Coût fixe : 0 €/mois** (offres gratuites Cloudflare uniquement).
@@ -42,7 +42,7 @@ Comptes invités, chat, notifications SMS, remboursement automatisé, marketplac
 | Tests | Vitest + `@cloudflare/vitest-pool-workers` |
 | Hébergement | Cloudflare Workers avec Static Assets (via `@cloudflare/vite-plugin`) |
 | Versioning / CI | GitHub (+ Workers Builds ou GitHub Actions) |
-| Paiements | Wero et PayPal.Me, sans API |
+| Paiements | Wero, PayPal.Me et Revolut.me, sans API |
 | Billets / QR | `qrcode-generator` (encodage QR, front + Worker) ; scan par caméra avec `jsqr` ; PNG du QR généré dans le Worker (sans dépendance native) |
 | E-mail des billets | Brevo, API HTTPS (offre gratuite : 300 e-mails/jour, sans carte bancaire) ; interface `Mailer` remplaçable |
 
@@ -50,7 +50,7 @@ Comptes invités, chat, notifications SMS, remboursement automatisé, marketplac
 
 - **Un seul Worker** sert l'API (`/api/*`) et les assets statiques du SPA. Cloudflare recommande désormais Workers + Static Assets pour les nouveaux projets plutôt que Pages ; à re-vérifier au moment de l'initialisation. Une seule unité de déploiement, pas de CORS à gérer.
 - **Hono** est ajouté (non imposé) pour le routage, les middlewares et la validation Zod ; remplaçable si l'équipe préfère du Worker "nu".
-- **Images** : pour rester à 0 € sans carte bancaire, les images (couvertures d'événements, QR code Wero) sont des **fichiers du projet** dans `public/images/`, servis comme assets statiques ; la base ne stocke que leur chemin. Pas d'upload depuis l'admin. R2 (offre gratuite mais carte bancaire requise) est une évolution possible, non incluse.
+- **Images** : pour rester à 0 € sans carte bancaire, les images (couvertures d'événements, QR code Wero) sont soit des **fichiers du projet** dans `public/images/` (assets statiques), soit des **photos téléversées depuis l'admin** (galerie ou appareil photo du téléphone), réduites dans le navigateur (JPEG, 1 Mo max) et stockées dans la table D1 `images` (base64), servies par `GET /api/images/:id`. La base d'événements ne garde que le chemin. R2 (offre gratuite mais carte bancaire requise) reste une évolution possible, non incluse.
 - **Hachage du mot de passe admin** : PBKDF2 via WebCrypto (natif, rapide). Éviter bcrypt/scrypt en JS pur, qui dépassent le budget CPU du plan gratuit (10 ms/requête).
 - **Expiration des réservations** : calcul paresseux (une réservation `pending` avec `expires_at` dépassé ne compte plus dans les places et est marquée `expired` à la prochaine lecture/écriture) **plus** un Cron Trigger quotidien de nettoyage.
 - **Rate limiting** : table D1 dédiée (compteurs par IP hachée + fenêtre), car on ne suppose pas la disponibilité du binding natif de rate limiting sur le plan gratuit.
@@ -113,14 +113,14 @@ Moderne, chaleureuse, festive — **pas** le style d'une billetterie professionn
 
 - Logo NAHE?, slogan « Le prochain rendez-vous est ici. ».
 - Liste des événements **publiés, à venir et non annulés**, triés par date.
-- Par carte : image, titre, date, lieu, prix, places restantes, bouton « Voir l'événement ».
+- Par carte : image, titre, date, lieu (nom puis adresse), prix, places restantes (si l'organisateur l'a activé ; « Complet » reste toujours affiché), bouton « Voir l'événement ».
 - Les événements non publiés ou privés n'apparaissent jamais ici.
 
 ### 4.2 Page événement
 
-Contenu : titre, description, image de couverture, date/heure, lieu, prix (€), capacité, places restantes, date limite de réservation, informations complémentaires, bouton « Je réserve ma place ».
+Contenu : titre, description, image de couverture, date/heure, lieu (nom puis adresse), prix (€), capacité, places restantes (si activé), date limite de réservation, informations complémentaires, bouton « Je réserve ma place ».
 
-- **Visibilité** : un événement est soit `public` (listé, accessible via slug), soit `private` (non listé, accessible uniquement via un lien contenant un `invite_token` aléatoire). L'admin copie le lien en un clic, avec un bouton de partage WhatsApp (`https://wa.me/?text=…`).
+- **Visibilité** : un événement est soit `public` (listé, accessible via slug), soit `private` (non listé, accessible uniquement via un lien contenant un `invite_token` aléatoire). L'admin copie le lien en un clic, avec un bouton « Partager » (feuille de partage du système via Web Share API, copie du message en repli).
 - Le bouton de réservation est désactivé, avec un message explicite, si l'événement est complet, fermé, annulé, passé ou si la date limite est dépassée. Le serveur applique ces règles indépendamment du front.
 
 ### 4.3 Réservation
@@ -133,6 +133,7 @@ Aucun compte requis.
 | E-mail | Obligatoire, format valide |
 | Téléphone | Facultatif, format normalisé |
 | Nombre de places | Entier ≥ 1, défaut 1, max configurable par réservation (défaut 10) et ≤ places restantes |
+| Participants | Dès 2 places : prénom et nom obligatoires pour chaque place supplémentaire (la place 1 est au nom du titulaire). Stockés en JSON (`reservations.guests`), repris sur chaque billet, le scan et l'e-mail |
 | Moyen de paiement | `wero` ou `paypal` (non demandé si l'événement est gratuit) |
 
 Comportement :
@@ -149,16 +150,18 @@ Comportement :
 
 Aucune intégration API. Aucune confirmation automatique.
 
-**Wero** : instructions et/ou QR code configurés par l'admin, montant à régler, référence de réservation à indiquer en motif lorsque c'est possible.
+**Wero** : instructions, QR code et/ou contact (e-mail ou numéro, avec bouton « Copier ») configurés par l'admin ; Wero ne fournit pas de lien pour ouvrir l'application ni pré-remplir numéro ou motif, montant à régler, référence de réservation à indiquer en motif lorsque c'est possible.
 
 **PayPal** : lien PayPal.Me configuré, avec le montant ajouté (`paypal.me/<compte>/<montant>EUR`), référence affichée à copier.
+
+**Revolut** : lien Revolut.me configuré (domaine `revolut.me` uniquement), normalisé en `revolut.me/<compte>`. Le montant n'est pas pré-rempli (non vérifié côté Revolut) : il est affiché à côté du bouton, avec la référence.
 
 Règles :
 
 - Un clic sur un lien de paiement **ne change jamais** le statut.
 - Seul l'organisateur confirme, après vérification dans son application.
 - Un bouton facultatif « J'ai payé » peut signaler le paiement à l'admin (indicateur visuel `payment_declared_at`), sans effet sur le statut.
-- Rappel dans l'interface et le README : les modes de transfert entre proches ne sont à utiliser que lorsque l'opération est éligible selon les conditions de Wero et PayPal.
+- Rappel dans l'interface et le README : les modes de transfert entre proches ne sont à utiliser que lorsque l'opération est éligible selon les conditions de Wero, PayPal et Revolut.
 
 ### 4.5 Statuts de réservation
 
@@ -202,7 +205,7 @@ Transitions autorisées : `pending → confirmed | cancelled | expired`, `confir
 
 ### 5.1 Événements
 
-Créer, modifier, définir image/date/lieu/prix/capacité/date limite, **publier/dépublier**, **fermer les réservations**, **annuler** l'événement, copier le lien d'invitation.
+Créer, modifier, définir image/date/lieu (nom + adresse)/prix/capacité/affichage ou non des places restantes/date limite, **publier/dépublier**, **fermer les réservations**, **annuler** l'événement, copier le lien d'invitation.
 
 Statuts d'événement : `draft`, `published`, `closed` (réservations fermées), `cancelled`.
 
@@ -227,7 +230,7 @@ Les deux montants sont toujours présentés séparément et étiquetés pour ne 
 
 ### 5.4 Paramètres de paiement
 
-Instructions Wero, chemin du QR code Wero (fichier dans `public/images/`), URL PayPal.Me (validée : domaine `paypal.me` uniquement), délai d'expiration par défaut.
+Instructions Wero, QR code Wero (fichier de `public/images/` ou image envoyée depuis l'admin), URL PayPal.Me (validée : domaine `paypal.me` uniquement), URL Revolut.me (domaine `revolut.me` uniquement), délai d'expiration par défaut.
 
 ---
 
@@ -245,7 +248,9 @@ D1 + Drizzle ORM. Montants en **centimes entiers**. Dates en ISO 8601 UTC (texte
 | visibility | `public` \| `private`, NOT NULL |
 | title, description | NOT NULL / texte |
 | cover_image_url | texte |
-| location | NOT NULL |
+| location | NOT NULL (nom du lieu) |
+| address | texte, défaut `''` (adresse postale, facultative, ≤ 300 caractères) |
+| show_remaining | booléen, défaut vrai (afficher ou non le compteur de places restantes) |
 | starts_at, ends_at | NOT NULL / nullable ; `ends_at > starts_at` |
 | price_cents | INTEGER ≥ 0 |
 | capacity | INTEGER ≥ 1 |
@@ -266,6 +271,7 @@ Index : `slug`, `invite_token`, `(status, visibility, starts_at)`.
 | first_name, last_name, email | NOT NULL |
 | phone | nullable |
 | quantity | INTEGER ≥ 1 |
+| guests | TEXT (JSON `[{firstName, lastName}]`, places 2 à N), NULL si 1 place ; effacé à l'anonymisation |
 | total_amount_cents | INTEGER ≥ 0 (figé à la création) |
 | payment_method | `wero` \| `paypal` \| NULL (si gratuit) |
 | payment_status | `pending` \| `confirmed` \| `cancelled` \| `expired` |
@@ -297,7 +303,7 @@ Index : `reservation_id`, `(event_id, status)`. Le jeton affiché dans le QR n'e
 
 ### `payment_settings` (ligne unique)
 
-`id`, `wero_instructions`, `wero_qr_image_url`, `paypal_me_url`, `pending_ttl_hours`, `updated_at`.
+`id`, `wero_instructions`, `wero_qr_image_url`, `wero_contact`, `paypal_me_url`, `revolut_me_url`, `pending_ttl_hours`, `updated_at`.
 
 ### `admin_sessions`
 
@@ -452,7 +458,7 @@ npm run deploy               # wrangler deploy
 
 - [ ] L'admin crée et publie un événement.
 - [ ] Un invité réserve sans compte.
-- [ ] Il choisit Wero ou PayPal et voit montant, référence et instructions.
+- [ ] Il choisit Wero, PayPal ou Revolut et voit montant, référence et instructions.
 - [ ] L'organisateur confirme le paiement manuellement.
 - [ ] Chaque place confirmée a son billet à QR code, reçu par e-mail et visible sur le suivi.
 - [ ] L'organisateur scanne les billets à l'entrée avec son téléphone ; un billet ne passe qu'une fois.
@@ -474,7 +480,7 @@ Progressif, une étape livrable à la fois :
 4. Pages publiques avec données fictives.
 5. D1 et Drizzle : schéma, migrations, seed.
 6. API et logique de réservation (capacité atomique, expiration).
-7. Instructions de paiement Wero et PayPal.
+7. Instructions de paiement Wero, PayPal et Revolut.
 8. Authentification et dashboard admin.
 9. Validations, sécurité et tests.
 10. Déploiement Cloudflare et README.
@@ -491,7 +497,7 @@ Priorité absolue : une première version **simple, sécurisée, utilisable et s
 1. Expiration des réservations `pending` : **24 h**.
 2. Conservation des données : **6 mois** après l'événement.
 3. Pas d'e-mail de confirmation : l'invité **conserve son lien de suivi**.
-4. Images : **fichiers directement dans le projet** (`public/images/`), pas de R2 ni d'upload. L'admin saisit le chemin (ex. `/images/barbecue.jpg`) ; ajouter une image = la déposer dans le dépôt puis redéployer.
+4. Images : pas de R2. Téléversement depuis l'admin vers D1 (table `images`, base64, 1 Mo max, JPEG/PNG/WebP vérifiés par signature, SVG refusé) ; la saisie d'un chemin `public/images/…` reste possible. Les images non référencées sont purgées par la maintenance quotidienne après 24 h.
 5. Bouton « J'ai payé » (signalement sans effet sur le statut) : **inclus**.
 6. Hono ajouté à la stack imposée : **accepté**.
 
