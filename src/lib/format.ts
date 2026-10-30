@@ -7,6 +7,10 @@ export function formatEuros(cents: number): string {
   return euros.format(cents / 100).replace(/ | /g, ' ')
 }
 
+export function formatPlacesLeft(n: number): string {
+  return `${n} place${n > 1 ? 's' : ''} restante${n > 1 ? 's' : ''}`
+}
+
 export function formatPrice(cents: number): string {
   return cents === 0 ? 'Gratuit' : formatEuros(cents)
 }
@@ -20,6 +24,7 @@ const fullDate = new Intl.DateTimeFormat(LOCALE, {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+export { formatEventSchedule, formatHour, formatTimeRange } from '../../shared/schedule'
 export const formatEventDate = (iso: string) => `${cap(dateLong.format(new Date(iso)))} à ${formatTime(iso)}`
 export const formatDay = (iso: string) => cap(dateLong.format(new Date(iso)))
 export const formatShortDate = (iso: string) => cap(dateOnly.format(new Date(iso)))

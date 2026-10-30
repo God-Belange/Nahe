@@ -12,7 +12,3 @@ export function shareUrl(event: { slug: string; visibility: EventVisibility; inv
 }
 
 export const trackingUrl = (token: string) => origin() + trackingPath(token)
-
-export function whatsappUrl(text: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`
-}

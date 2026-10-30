@@ -5,6 +5,7 @@ import { buildPaypalLink } from '../../../shared/paypal'
 import { PageHeader } from '../../components/admin/PageHeader'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { CoverImageField } from '../../components/admin/CoverImageField'
 import { TextAreaField, TextField } from '../../components/ui/Field'
 import { Alert, ErrorState, Skeleton } from '../../components/ui/feedback'
 import { useToast } from '../../components/ui/Toast'
@@ -16,17 +17,19 @@ import { fr } from '../../lib/fr'
 interface FormState {
   weroInstructions: string
   weroQrImageUrl: string
+  weroContact: string
   paypalMeUrl: string
+  revolutMeUrl: string
   pendingTtlHours: string
 }
-
-const IMAGE_HINT = "Déposez d'abord le fichier dans public/images/ du dépôt, puis redéployez. Saisissez ici son chemin, par exemple /images/wero-qr.png."
 
 function toForm(s: PaymentSettings): FormState {
   return {
     weroInstructions: s.weroInstructions,
     weroQrImageUrl: s.weroQrImageUrl ?? '',
+    weroContact: s.weroContact ?? '',
     paypalMeUrl: s.paypalMeUrl ?? '',
+    revolutMeUrl: s.revolutMeUrl ?? '',
     pendingTtlHours: String(s.pendingTtlHours),
   }
 }
@@ -35,16 +38,14 @@ export default function SettingsPage() {
   useDocumentTitle('Paramètres de paiement')
   const toast = useToast()
   const { data, error, loading, reload } = useAsync(() => api.get<PaymentSettings>('/admin/payment-settings'), [])
-  const [form, setForm] = useState<FormState>({ weroInstructions: '', weroQrImageUrl: '', paypalMeUrl: '', pendingTtlHours: '24' })
+  const [form, setForm] = useState<FormState>({ weroInstructions: '', weroQrImageUrl: '', weroContact: '', paypalMeUrl: '', revolutMeUrl: '', pendingTtlHours: '24' })
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [formError, setFormError] = useState<string>()
   const [saving, setSaving] = useState(false)
-  const [failedQr, setFailedQr] = useState<string>()
 
   useEffect(() => {
     if (data) setForm(toForm(data))
   }, [data])
-  const qrFailed = failedQr !== undefined && failedQr === form.weroQrImageUrl
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }))
 
@@ -63,7 +64,9 @@ export default function SettingsPage() {
       const saved = await api.put<PaymentSettings>('/admin/payment-settings', {
         weroInstructions: form.weroInstructions,
         weroQrImageUrl: form.weroQrImageUrl.trim() === '' ? null : form.weroQrImageUrl.trim(),
+        weroContact: form.weroContact.trim() === '' ? null : form.weroContact.trim(),
         paypalMeUrl: form.paypalMeUrl.trim() === '' ? null : form.paypalMeUrl.trim(),
+        revolutMeUrl: form.revolutMeUrl.trim() === '' ? null : form.revolutMeUrl.trim(),
         pendingTtlHours: ttl,
       })
       setForm(toForm(saved))
@@ -82,7 +85,6 @@ export default function SettingsPage() {
   if (error && !data) return <ErrorState message={error.message} onRetry={reload} />
 
   const paypalPreview = form.paypalMeUrl.trim() ? buildPaypalLink(form.paypalMeUrl.trim(), 1000) : null
-  const qr = form.weroQrImageUrl.trim()
 
   return (
     <>
@@ -101,23 +103,26 @@ export default function SettingsPage() {
             onChange={(e) => set('weroInstructions', e.target.value)}
             maxLength={1000}
             placeholder="Envoyez le montant au 06 12 34 56 78 et indiquez la référence en motif."
-            hint="Wero n'est proposé aux invités que si des instructions ou un QR code sont renseignés."
+            hint="Wero n'est proposé aux invités que si des instructions, un QR code ou un contact sont renseignés."
           />
           <TextField
-            label="QR code Wero"
+            label="E-mail ou numéro Wero"
             optional
-            placeholder="/images/wero-qr.png"
+            placeholder="06 12 34 56 78 ou prenom@exemple.fr"
+            value={form.weroContact}
+            error={errors.weroContact}
+            onChange={(e) => set('weroContact', e.target.value)}
+            maxLength={100}
+            hint="Affiché à l'invité avec un bouton « Copier » pour le coller dans Wero."
+          />
+          <CoverImageField
+            label="QR code Wero"
+            previewAlt="Aperçu du QR code Wero"
+            square
             value={form.weroQrImageUrl}
             error={errors.weroQrImageUrl}
-            onChange={(e) => set('weroQrImageUrl', e.target.value)}
-            hint={IMAGE_HINT}
+            onChange={(url) => set('weroQrImageUrl', url)}
           />
-          {qr.startsWith('/images/') &&
-            (qrFailed ? (
-              <p className="text-sm text-warn">Aperçu indisponible : aucun fichier à cet emplacement (pour l'instant).</p>
-            ) : (
-              <img src={qr} alt="Aperçu du QR code Wero" onError={() => setFailedQr(form.weroQrImageUrl)} className="size-40 rounded-2xl border border-line bg-white object-contain p-2" />
-            ))}
         </Card>
 
         <Card className="space-y-4">
@@ -140,6 +145,20 @@ export default function SettingsPage() {
               </a>
             </p>
           )}
+        </Card>
+
+        <Card className="space-y-4">
+          <h2 className="text-xl font-bold">Revolut</h2>
+          <TextField
+            label="Lien Revolut.me"
+            optional
+            type="url"
+            placeholder="https://revolut.me/votrecompte"
+            value={form.revolutMeUrl}
+            error={errors.revolutMeUrl}
+            onChange={(e) => set('revolutMeUrl', e.target.value)}
+            hint="Domaine revolut.me uniquement. Le montant n'est pas pré-rempli : l'invité le voit à côté du bouton."
+          />
         </Card>
 
         <Card className="space-y-4">

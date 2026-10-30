@@ -26,7 +26,9 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const isBlob = body instanceof Blob
+  if (isBlob) headers['Content-Type'] = body.type
+  else if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
 
   let res: Response
@@ -35,7 +37,7 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
       method,
       headers,
       credentials: 'same-origin',
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: isBlob ? body : JSON.stringify(body) } : {}),
     })
   } catch {
     throw new ApiClientError(0, 'network_error', fr.common.networkError)
@@ -67,6 +69,7 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
+  upload: <T>(path: string, file: Blob) => request<T>('POST', path, file),
 }
 
 export function errorMessage(err: unknown): string {

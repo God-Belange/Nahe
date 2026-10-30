@@ -12,6 +12,9 @@ export const fr = {
     confirm: 'Confirmer',
     copy: 'Copier',
     copied: 'Copié !',
+    share: 'Partager',
+    shareCopied: 'Message copié : collez-le où vous voulez.',
+    shareFailed: 'Partage impossible.',
     free: 'Gratuit',
     required: 'obligatoire',
     optional: 'facultatif',
@@ -40,15 +43,16 @@ export const fr = {
     see: "Voir l'événement",
     full: 'Complet',
     closed: 'Réservations fermées',
-    shareWhatsapp: 'Partager sur WhatsApp',
+    share: 'Partager sur les réseaux',
     notFoundTitle: 'Événement introuvable',
     notFoundText: "Cet événement n'existe pas ou n'est plus accessible. Vérifiez le lien reçu.",
   },
   payment: {
     wero: 'Wero',
     paypal: 'PayPal',
+    revolut: 'Revolut',
     reminder:
-      "Les virements entre proches ne doivent être utilisés que lorsque l'opération est éligible selon les conditions de Wero et de PayPal.",
+      "Les virements entre proches ne doivent être utilisés que lorsque l'opération est éligible selon les conditions de Wero, de PayPal et de Revolut.",
   },
 } as const
 

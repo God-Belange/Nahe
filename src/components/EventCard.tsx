@@ -1,9 +1,10 @@
 import { Link } from 'react-router'
 import type { PublicEvent } from '../../shared/types'
 import { accentFor, accentStyle } from '../lib/accent'
-import { dateParts, formatPrice, formatTime } from '../lib/format'
+import { dateParts, formatPlacesLeft, formatPrice, formatTimeRange } from '../lib/format'
 import { eventPath } from '../lib/links'
 import { fr } from '../lib/fr'
+import { AddressLink } from './AddressLink'
 import { EventCover } from './EventCover'
 import { Badge } from './ui/Badge'
 
@@ -35,15 +36,19 @@ export function EventCard({ event, index = 0 }: { event: PublicEvent; index?: nu
           </Link>
         </h3>
         <ul className="space-y-1 text-sm text-ink-soft">
-          <li><span aria-hidden="true">🕗 </span><span className="sr-only">Heure : </span>{formatTime(event.startsAt)}</li>
-          <li><span aria-hidden="true">📍 </span><span className="sr-only">Lieu : </span>{event.location}</li>
+          <li><span aria-hidden="true">🕗 </span><span className="sr-only">Heure : </span>{formatTimeRange(event.startsAt, event.endsAt)}</li>
+          <li>
+            <span aria-hidden="true">📍 </span><span className="sr-only">Lieu : </span>
+            <span className="font-semibold text-ink">{event.location}</span>
+            {event.address && <span className="block pl-6"><AddressLink address={event.address} /></span>}
+          </li>
         </ul>
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
           <Badge tone="sun">{formatPrice(event.priceCents)}</Badge>
           {isFull ? (
             <Badge tone="bad">{fr.event.full}</Badge>
           ) : (
-            <Badge tone="brand">{event.remaining} place{event.remaining > 1 ? 's' : ''} restante{event.remaining > 1 ? 's' : ''}</Badge>
+            event.showRemaining && <Badge tone="brand">{formatPlacesLeft(event.remaining)}</Badge>
           )}
         </div>
         <span aria-hidden="true" className="mt-1 inline-flex min-h-11 items-center justify-center rounded-full bg-brand px-5 text-[0.95rem] font-semibold text-white transition group-hover:bg-brand-strong">

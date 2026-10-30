@@ -1,7 +1,9 @@
 import { useParams } from 'react-router'
 import { BLOCK_REASON_MESSAGES } from '../../../shared/booking'
 import type { PublicEvent } from '../../../shared/types'
+import { AddressLink } from '../../components/AddressLink'
 import { EventCover } from '../../components/EventCover'
+import { ShareButton } from '../../components/ShareButton'
 import { PrivateMeta } from '../../components/PrivateMeta'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
@@ -12,20 +14,12 @@ import { usePublicEvent, type EventMode } from '../../hooks/usePublicEvent'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { accentFor, accentStyle } from '../../lib/accent'
 import { ApiClientError, errorMessage } from '../../lib/api'
-import { formatDay, formatEventDate, formatFullDate, formatPrice, formatTime } from '../../lib/format'
+import { formatEventSchedule, formatFullDate, formatPlacesLeft, formatPrice } from '../../lib/format'
 import { fr } from '../../lib/fr'
-import { eventPath, invitePath, whatsappUrl } from '../../lib/links'
+import { eventPath, invitePath } from '../../lib/links'
 
 function bookingPath(event: PublicEvent, mode: EventMode, inviteToken: string | undefined): string {
   return mode === 'invite' && inviteToken ? `${invitePath(inviteToken)}/reserver` : `${eventPath(event.slug)}/reserver`
-}
-
-function schedule(event: PublicEvent): string {
-  const start = formatEventDate(event.startsAt)
-  if (!event.endsAt) return start
-  return formatDay(event.startsAt) === formatDay(event.endsAt)
-    ? `${start} · jusqu'à ${formatTime(event.endsAt)}`
-    : `${start} → ${formatEventDate(event.endsAt)}`
 }
 
 function Fact({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
@@ -41,13 +35,16 @@ function Fact({ icon, label, children }: { icon: string; label: string; children
 }
 
 function Gauge({ event }: { event: PublicEvent }) {
+  if (!event.showRemaining) {
+    return event.remaining <= 0 ? <p className="text-sm font-semibold text-bad">{fr.event.full}</p> : null
+  }
   const taken = event.capacity - event.remaining
   const pct = Math.min(100, Math.round((taken / event.capacity) * 100))
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between text-sm">
         <span className="font-semibold">
-          {event.remaining <= 0 ? fr.event.full : `${event.remaining} place${event.remaining > 1 ? 's' : ''} restante${event.remaining > 1 ? 's' : ''}`}
+          {event.remaining <= 0 ? fr.event.full : formatPlacesLeft(event.remaining)}
         </span>
         <span className="text-ink-muted">sur {event.capacity}</span>
       </div>
@@ -82,7 +79,7 @@ export default function EventPage({ mode }: { mode: EventMode }) {
 
   const blocked = event.blockReason !== null
   const reserveHref = bookingPath(event, mode, mode === 'invite' ? param : undefined)
-  const shareText = `${event.title} — ${formatEventDate(event.startsAt)}, ${event.location}. Réserve ta place : ${window.location.href}`
+  const shareText = `${event.title} — ${formatEventSchedule(event.startsAt, event.endsAt)}, ${event.location}. Réserve ta place : ${window.location.href}`
 
   const cta = blocked ? (
     <Button size="lg" fullWidth disabled>{fr.event.reserve}</Button>
@@ -128,17 +125,18 @@ export default function EventPage({ mode }: { mode: EventMode }) {
           <aside className="lg:sticky lg:top-6 lg:self-start" aria-label="Détails et réservation">
             <Card className="space-y-5">
               <ul className="space-y-4">
-                <Fact icon="📅" label="Quand">{schedule(event)}</Fact>
-                <Fact icon="📍" label="Où">{event.location}</Fact>
+                <Fact icon="📅" label="Quand">{formatEventSchedule(event.startsAt, event.endsAt)}</Fact>
+                <Fact icon="📍" label="Où">
+                  {event.location}
+                  {event.address && <span className="block text-sm font-normal text-ink-soft"><AddressLink address={event.address} /></span>}
+                </Fact>
                 <Fact icon="💶" label="Prix par place">{formatPrice(event.priceCents)}</Fact>
                 {event.bookingDeadline && <Fact icon="⏳" label="Réserver avant le">{formatFullDate(event.bookingDeadline)}</Fact>}
               </ul>
               <Gauge event={event} />
               <div className="hidden lg:block">{cta}</div>
               {blocked && event.blockReason && <p className="text-sm text-ink-soft">{BLOCK_REASON_MESSAGES[event.blockReason]}</p>}
-              <LinkButton href={whatsappUrl(shareText)} variant="soft" fullWidth>
-                <span aria-hidden="true">💬</span> {fr.event.shareWhatsapp}
-              </LinkButton>
+              <ShareButton text={shareText} title={event.title} label={fr.event.share} size="md" fullWidth />
             </Card>
           </aside>
         </div>
@@ -148,7 +146,11 @@ export default function EventPage({ mode }: { mode: EventMode }) {
         <div className="mx-auto flex max-w-lg items-center gap-3">
           <div className="shrink-0 leading-tight">
             <p className="font-display text-xl font-extrabold">{formatPrice(event.priceCents)}</p>
-            <p className="text-xs text-ink-muted">{event.remaining > 0 ? `${event.remaining} restante${event.remaining > 1 ? 's' : ''}` : fr.event.full}</p>
+            {event.remaining <= 0 ? (
+              <p className="text-xs text-ink-muted">{fr.event.full}</p>
+            ) : (
+              event.showRemaining && <p className="text-xs text-ink-muted">{event.remaining} restante{event.remaining > 1 ? 's' : ''}</p>
+            )}
           </div>
           <div className="flex-1">{cta}</div>
         </div>

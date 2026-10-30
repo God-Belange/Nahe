@@ -4,7 +4,7 @@ import type { RESERVATION_STATUSES } from '../../../shared/constants'
 import type { AdminEvent, AdminReservation, AdminReservationsPage, MailResult, ReservationActionResult } from '../../../shared/types'
 import { ConfirmModal } from '../../components/admin/ConfirmModal'
 import { PageHeader } from '../../components/admin/PageHeader'
-import { WhatsAppButton } from '../../components/admin/WhatsAppButton'
+import { ShareButton } from '../../components/ShareButton'
 import { Badge, ReservationBadge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { CopyButton } from '../../components/ui/CopyButton'
@@ -132,7 +132,7 @@ export default function ReservationsPage() {
     <>
       <PageHeader
         title="Réservations"
-        subtitle="Vérifiez les paiements dans votre application Wero ou PayPal, puis confirmez-les ici."
+        subtitle="Vérifiez les paiements dans votre application Wero, PayPal ou Revolut, puis confirmez-les ici."
         actions={
           <a
             href={`/api/admin/reservations.csv${query ? `?${query}` : ''}`}
@@ -182,6 +182,7 @@ export default function ReservationsPage() {
                         <p className="font-bold">{r.firstName} {r.lastName}</p>
                         <p className="truncate text-sm text-ink-soft">{r.email}</p>
                         {r.phone && <p className="text-sm text-ink-soft">{r.phone}</p>}
+                        {r.guests.length > 0 && <p className="text-sm text-ink-soft">+ {r.guests.map((g) => `${g.firstName} ${g.lastName}`).join(', ')}</p>}
                       </div>
                       <ReservationBadge status={r.status} />
                     </div>
@@ -214,6 +215,7 @@ export default function ReservationsPage() {
                           <p className="font-bold">{r.firstName} {r.lastName}</p>
                           <p className="text-ink-soft">{r.email}</p>
                           {r.phone && <p className="text-ink-soft">{r.phone}</p>}
+                          {r.guests.length > 0 && <p className="text-ink-soft">+ {r.guests.map((g) => `${g.firstName} ${g.lastName}`).join(', ')}</p>}
                           <p className="mt-1 font-mono text-xs text-ink-muted">{r.reference}</p>
                         </td>
                         <td className="px-4 py-3">{r.eventTitle}</td>
@@ -293,7 +295,7 @@ export default function ReservationsPage() {
             <input readOnly aria-label="Nouveau lien de suivi" value={regen.link} onFocus={(e) => e.currentTarget.select()} className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm" />
             <div className="flex flex-wrap gap-2">
               <CopyButton value={regen.link} label="Copier le lien" />
-              <WhatsAppButton text={`Voici ton nouveau lien de suivi Nahe? pour ta réservation ${regen.reservation.reference} : ${regen.link}`} />
+              <ShareButton text={`Voici ton nouveau lien de suivi Nahe? pour ta réservation ${regen.reservation.reference} : ${regen.link}`} />
             </div>
           </div>
         )}

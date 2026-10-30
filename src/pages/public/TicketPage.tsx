@@ -1,3 +1,4 @@
+import { AddressLink } from '../../components/AddressLink'
 import { useParams } from 'react-router'
 import type { PublicTicket } from '../../../shared/types'
 import { PrivateMeta } from '../../components/PrivateMeta'
@@ -10,7 +11,7 @@ import { useAsync } from '../../hooks/useAsync'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { accentFor, accentStyle } from '../../lib/accent'
 import { api, ApiClientError, errorMessage } from '../../lib/api'
-import { formatEventDate } from '../../lib/format'
+import { formatEventSchedule } from '../../lib/format'
 import { fr } from '../../lib/fr'
 import { TICKET_STATE_MESSAGES } from '../../lib/tickets'
 
@@ -47,8 +48,9 @@ export default function TicketPage() {
       <header className="animate-rise pt-2 text-center">
         <p className="text-sm font-bold tracking-wide text-brand-strong uppercase">Billet {ticket.seq} / {ticket.total}</p>
         <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">{ticket.event.title}</h1>
-        <p className="mt-2 text-ink-soft">{formatEventDate(ticket.event.startsAt)}</p>
-        <p className="text-ink-soft">{ticket.event.location}</p>
+        <p className="mt-2 text-ink-soft">{formatEventSchedule(ticket.event.startsAt, ticket.event.endsAt)}</p>
+        <p className="font-semibold text-ink">{ticket.event.location}</p>
+        {ticket.event.address && <p className="text-ink-soft"><AddressLink address={ticket.event.address} /></p>}
       </header>
 
       <Card className="animate-rise space-y-4 text-center">

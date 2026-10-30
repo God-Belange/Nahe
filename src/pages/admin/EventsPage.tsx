@@ -1,6 +1,6 @@
 import type { AdminEvent } from '../../../shared/types'
 import { PageHeader } from '../../components/admin/PageHeader'
-import { WhatsAppButton } from '../../components/admin/WhatsAppButton'
+import { ShareButton } from '../../components/ShareButton'
 import { Badge, EventBadge } from '../../components/ui/Badge'
 import { LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -9,11 +9,11 @@ import { EmptyState, ErrorState, Skeleton } from '../../components/ui/feedback'
 import { useAsync } from '../../hooks/useAsync'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { api } from '../../lib/api'
-import { formatEventDate, formatPrice } from '../../lib/format'
+import { formatEventSchedule, formatPrice } from '../../lib/format'
 import { shareUrl } from '../../lib/links'
 
 export function invitationText(event: AdminEvent): string {
-  return `🎉 ${event.title}\n📅 ${formatEventDate(event.startsAt)}\n📍 ${event.location}\n\nRéserve ta place sur Nahe? 👉 ${shareUrl(event)}`
+  return `🎉 ${event.title}\n📅 ${formatEventSchedule(event.startsAt, event.endsAt)}\n📍 ${event.address ? `${event.location}, ${event.address}` : event.location}\n\nRéserve ta place sur Nahe? 👉 ${shareUrl(event)}`
 }
 
 function Visibility({ event }: { event: AdminEvent }) {
@@ -35,7 +35,7 @@ function Actions({ event }: { event: AdminEvent }) {
     <div className="flex flex-wrap gap-2">
       <LinkButton to={`/admin/evenements/${event.id}`} variant="secondary" size="sm">Modifier</LinkButton>
       <CopyButton value={shareUrl(event)} label="Copier le lien" />
-      <WhatsAppButton text={invitationText(event)} />
+      <ShareButton text={invitationText(event)} />
     </div>
   )
 }
@@ -69,7 +69,7 @@ export default function EventsPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h2 className="text-lg font-bold">{e.title}</h2>
-                      <p className="text-sm text-ink-soft">{formatEventDate(e.startsAt)}</p>
+                      <p className="text-sm text-ink-soft">{formatEventSchedule(e.startsAt, e.endsAt)}</p>
                     </div>
                     <EventBadge status={e.status} />
                   </div>
@@ -101,7 +101,7 @@ export default function EventsPage() {
                   <tr key={e.id} className="align-top">
                     <td className="px-4 py-3">
                       <p className="font-bold">{e.title}</p>
-                      <p className="text-ink-soft">{formatEventDate(e.startsAt)}</p>
+                      <p className="text-ink-soft">{formatEventSchedule(e.startsAt, e.endsAt)}</p>
                     </td>
                     <td className="px-4 py-3"><EventBadge status={e.status} /></td>
                     <td className="px-4 py-3"><Visibility event={e} /></td>

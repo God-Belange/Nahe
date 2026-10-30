@@ -3,14 +3,15 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import type { EventVisibility } from '../../../shared/constants'
 import type { AdminEventDetail, EventTickets } from '../../../shared/types'
+import { CoverImageField } from '../../components/admin/CoverImageField'
 import { ConfirmModal } from '../../components/admin/ConfirmModal'
 import { PageHeader } from '../../components/admin/PageHeader'
-import { WhatsAppButton } from '../../components/admin/WhatsAppButton'
+import { ShareButton } from '../../components/ShareButton'
 import { Badge, EventBadge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { CopyButton } from '../../components/ui/CopyButton'
-import { TextAreaField, TextField } from '../../components/ui/Field'
+import { CheckboxField, TextAreaField, TextField } from '../../components/ui/Field'
 import { Alert, ErrorState, Skeleton } from '../../components/ui/feedback'
 import { useToast } from '../../components/ui/Toast'
 import { useAsync } from '../../hooks/useAsync'
@@ -23,6 +24,7 @@ import {
   parseEurosToCents,
   parisLocalToIso,
 } from '../../lib/format'
+import { fr } from '../../lib/fr'
 import { shareUrl } from '../../lib/links'
 import { invitationText } from './EventsPage'
 
@@ -31,12 +33,14 @@ interface FormState {
   description: string
   coverImageUrl: string
   location: string
+  address: string
   startsAt: string
   endsAt: string
   bookingDeadline: string
   price: string
   capacity: string
   maxPerBooking: string
+  showRemaining: boolean
   visibility: EventVisibility
   slug: string
   extraInfo: string
@@ -47,12 +51,14 @@ const EMPTY: FormState = {
   description: '',
   coverImageUrl: '',
   location: '',
+  address: '',
   startsAt: '',
   endsAt: '',
   bookingDeadline: '',
   price: '',
   capacity: '20',
   maxPerBooking: '10',
+  showRemaining: true,
   visibility: 'public',
   slug: '',
   extraInfo: '',
@@ -64,12 +70,14 @@ function toForm(e: AdminEventDetail): FormState {
     description: e.description,
     coverImageUrl: e.coverImageUrl ?? '',
     location: e.location,
+    address: e.address,
     startsAt: isoToParisLocal(e.startsAt),
     endsAt: isoToParisLocal(e.endsAt),
     bookingDeadline: isoToParisLocal(e.bookingDeadline),
     price: centsToInput(e.priceCents),
     capacity: String(e.capacity),
     maxPerBooking: String(e.maxPerBooking),
+    showRemaining: e.showRemaining,
     visibility: e.visibility,
     slug: e.slug,
     extraInfo: e.extraInfo,
@@ -100,12 +108,14 @@ function buildPayload(form: FormState): { payload?: Record<string, unknown>; err
       description: form.description,
       coverImageUrl: form.coverImageUrl.trim() === '' ? null : form.coverImageUrl.trim(),
       location: form.location,
+      address: form.address,
       startsAt,
       endsAt,
       bookingDeadline,
       priceCents,
       capacity,
       maxPerBooking,
+      showRemaining: form.showRemaining,
       visibility: form.visibility,
       extraInfo: form.extraInfo,
       ...(form.slug.trim() !== '' ? { slug: form.slug.trim() } : {}),
@@ -150,17 +160,6 @@ function availableActions(status: AdminEventDetail['status']): Action[] {
     case 'closed': return ['publish', 'unpublish', 'cancel']
     case 'cancelled': return []
   }
-}
-
-function ImagePreview({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
-  if (!src.startsWith('/images/')) return null
-  return failed ? (
-    <p className="text-sm text-warn">Aperçu indisponible : aucun fichier à cet emplacement (pour l'instant).</p>
-  ) : (
-    <img src={src} alt="Aperçu de l'image de couverture" onError={() => setFailed(true)} className="h-36 w-full rounded-2xl border border-line object-cover sm:w-64" />
-  )
 }
 
 export default function EventFormPage() {
@@ -272,19 +271,9 @@ export default function EventFormPage() {
             <h2 className="text-xl font-bold">L'essentiel</h2>
             <TextField label="Titre" required value={form.title} error={errors.title} onChange={(e) => set('title', e.target.value)} maxLength={120} />
             <TextAreaField label="Description" value={form.description} error={errors.description} onChange={(e) => set('description', e.target.value)} maxLength={5000} />
-            <TextField label="Lieu" required value={form.location} error={errors.location} onChange={(e) => set('location', e.target.value)} maxLength={200} />
-            <div className="space-y-3">
-              <TextField
-                label="Image de couverture"
-                optional
-                placeholder="/images/barbecue.jpg"
-                value={form.coverImageUrl}
-                error={errors.coverImageUrl}
-                onChange={(e) => set('coverImageUrl', e.target.value)}
-                hint="Déposez d'abord le fichier dans le dossier public/images/ du dépôt, puis redéployez. Saisissez ici son chemin, par exemple /images/barbecue.jpg."
-              />
-              <ImagePreview src={form.coverImageUrl.trim()} />
-            </div>
+            <TextField label="Nom du lieu" required placeholder="Chez Sam, Salle des fêtes…" value={form.location} error={errors.location} onChange={(e) => set('location', e.target.value)} maxLength={200} />
+            <TextField label="Adresse" optional placeholder="12 rue des Lilas, 59000 Lille" autoComplete="street-address" value={form.address} error={errors.address} onChange={(e) => set('address', e.target.value)} maxLength={300} />
+            <CoverImageField value={form.coverImageUrl} error={errors.coverImageUrl} onChange={(url) => set('coverImageUrl', url)} />
           </Card>
 
           <Card className="space-y-4">
@@ -320,6 +309,12 @@ export default function EventFormPage() {
               <TextField label="Capacité" type="number" inputMode="numeric" min={1} required value={form.capacity} error={errors.capacity} onChange={(e) => set('capacity', e.target.value)} />
               <TextField label="Max. par réservation" type="number" inputMode="numeric" min={1} required value={form.maxPerBooking} error={errors.maxPerBooking} onChange={(e) => set('maxPerBooking', e.target.value)} />
             </div>
+            <CheckboxField
+              label="Afficher le nombre de places restantes"
+              hint="Décoché : les visiteurs ne voient pas le compteur, seule la mention « Complet » apparaît quand il n'y a plus de place."
+              checked={form.showRemaining}
+              onChange={(e) => set('showRemaining', e.target.checked)}
+            />
           </Card>
 
           <Card className="space-y-4">
@@ -397,7 +392,7 @@ export default function EventFormPage() {
               />
               <div className="flex flex-wrap gap-2">
                 <CopyButton value={shareUrl(detail)} label="Copier le lien" />
-                <WhatsAppButton text={invitationText(detail)} />
+                <ShareButton text={invitationText(detail)} />
               </div>
               {detail.visibility === 'private' && <Badge tone="brand">🔒 Lien secret : ne le publiez pas</Badge>}
             </Card>
@@ -432,7 +427,7 @@ export default function EventFormPage() {
       {cancelled && detail && (
         <section className="mt-8" aria-label="Remboursements à traiter">
           <Alert tone="warn" title="Remboursements à traiter manuellement">
-            Les paiements ne sont pas remboursés automatiquement. Remboursez ces participants depuis votre application Wero ou PayPal.
+            Les paiements ne sont pas remboursés automatiquement. Remboursez ces participants depuis votre application Wero, PayPal ou Revolut.
           </Alert>
           {detail.refundsToProcess.length === 0 ? (
             <p className="mt-3 text-sm text-ink-soft">Aucun paiement confirmé à rembourser.</p>
@@ -444,7 +439,7 @@ export default function EventFormPage() {
                     <p className="font-bold">{r.name}</p>
                     <p className="text-sm text-ink-soft">{r.email}</p>
                     <p className="text-sm">
-                      <strong>{formatEuros(r.amountCents)}</strong> · {r.paymentMethod === 'wero' ? 'Wero' : r.paymentMethod === 'paypal' ? 'PayPal' : '—'} · <span className="font-mono">{r.reference}</span>
+                      <strong>{formatEuros(r.amountCents)}</strong> · {r.paymentMethod ? fr.payment[r.paymentMethod] : '—'} · <span className="font-mono">{r.reference}</span>
                     </p>
                   </Card>
                 </li>

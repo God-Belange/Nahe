@@ -60,3 +60,17 @@ export function SelectField({ label, hint, error, required, optional, className,
     </FieldShell>
   )
 }
+
+export function CheckboxField({ label, hint, className, ...input }: { label: string; hint?: string; className?: string } & Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'type'>) {
+  const id = useId()
+  const hintId = `${id}-hint`
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="flex cursor-pointer items-start gap-3">
+        <input id={id} type="checkbox" aria-describedby={hint ? hintId : undefined} className="mt-1 size-5 shrink-0 accent-[var(--accent)]" {...input} />
+        <span className="text-sm font-semibold text-ink">{label}</span>
+      </label>
+      {hint && <p id={hintId} className="mt-1 ml-8 text-xs text-ink-muted">{hint}</p>}
+    </div>
+  )
+}

@@ -1,10 +1,13 @@
+import { AddressLink } from '../../components/AddressLink'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import type { PaymentMethod } from '../../../shared/constants'
 import type { PaymentInstructions, ReservationView, TicketView } from '../../../shared/types'
 import { PrivateMeta } from '../../components/PrivateMeta'
 import { TicketBadge } from '../../components/TicketBadge'
 import { TicketQr } from '../../components/TicketQr'
 import { ReservationBadge } from '../../components/ui/Badge'
+import { ShareButton } from '../../components/ShareButton'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Modal } from '../../components/ui/Modal'
@@ -16,9 +19,9 @@ import { useAsync } from '../../hooks/useAsync'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { accentFor, accentStyle } from '../../lib/accent'
 import { api, ApiClientError, errorMessage } from '../../lib/api'
-import { formatEuros, formatEventDate, formatRemaining } from '../../lib/format'
+import { formatEuros, formatEventSchedule, formatRemaining } from '../../lib/format'
 import { fr } from '../../lib/fr'
-import { eventPath, trackingUrl, whatsappUrl } from '../../lib/links'
+import { eventPath, trackingUrl } from '../../lib/links'
 import { ticketPath } from '../../lib/tickets'
 
 function useTick(ms: number) {
@@ -34,6 +37,40 @@ function Reference({ value }: { value: string }) {
     <div className="flex flex-wrap items-center gap-3">
       <span className="rounded-xl bg-brand-soft px-4 py-2 font-mono text-2xl font-bold tracking-wider text-brand-strong select-all">{value}</span>
       <CopyButton value={value} label="Copier la référence" />
+    </div>
+  )
+}
+
+function ChangeMethod({ payment, token, onChanged }: { payment: PaymentInstructions; token: string; onChanged: () => void }) {
+  const toast = useToast()
+  const [busy, setBusy] = useState<PaymentMethod | null>(null)
+  const others = payment.availableMethods.filter((m) => m !== payment.method)
+  if (others.length === 0) return null
+
+  async function change(method: PaymentMethod) {
+    setBusy(method)
+    try {
+      await api.post(`/reservations/${encodeURIComponent(token)}/payment-method`, { paymentMethod: method })
+      toast.show(`Moyen de paiement changé : ${fr.payment[method]}.`)
+      onChanged()
+    } catch (err) {
+      toast.show(errorMessage(err), 'bad')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-line pt-4">
+      <p className="text-sm font-semibold">Changer de moyen de paiement</p>
+      <div className="flex flex-wrap gap-2">
+        {others.map((m) => (
+          <Button key={m} variant="secondary" size="sm" loading={busy === m} disabled={busy !== null} onClick={() => change(m)}>
+            Payer avec {fr.payment[m]}
+          </Button>
+        ))}
+      </div>
+      <p className="text-xs text-ink-muted">Le délai de paiement reste inchangé. Si vous aviez cliqué sur « J'ai payé », le signalement est annulé.</p>
     </div>
   )
 }
@@ -62,6 +99,15 @@ function PaymentBlock({ payment, token, declaredAt, onDeclared }: { payment: Pay
       {payment.method === 'wero' ? (
         <div className="space-y-4">
           <p className="text-sm font-bold tracking-wide text-ink-muted uppercase">Paiement par Wero</p>
+          {payment.weroContact && (
+            <div className="space-y-2 rounded-2xl bg-brand-soft p-4">
+              <p className="text-sm font-semibold">Dans Wero, envoyez l'argent à :</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-mono text-xl font-bold break-all text-brand-strong select-all">{payment.weroContact}</span>
+                <CopyButton value={payment.weroContact} label="Copier" />
+              </div>
+            </div>
+          )}
           {payment.weroInstructions && <p className="leading-relaxed whitespace-pre-line">{payment.weroInstructions}</p>}
           {payment.weroQrImageUrl && (
             <img
@@ -71,6 +117,19 @@ function PaymentBlock({ payment, token, declaredAt, onDeclared }: { payment: Pay
             />
           )}
           <p>Montant à envoyer : <strong className="font-display text-xl">{formatEuros(payment.amountCents)}</strong></p>
+        </div>
+      ) : payment.method === 'revolut' ? (
+        <div className="space-y-4">
+          <p className="text-sm font-bold tracking-wide text-ink-muted uppercase">Paiement par Revolut</p>
+          {payment.revolutUrl ? (
+            <LinkButton href={payment.revolutUrl} size="lg" fullWidth>
+              Ouvrir Revolut ↗
+            </LinkButton>
+          ) : (
+            <Alert tone="warn">Le lien Revolut n'est pas disponible. Contactez l'organisateur.</Alert>
+          )}
+          <p>Montant à envoyer : <strong className="font-display text-xl">{formatEuros(payment.amountCents)}</strong></p>
+          <p className="text-sm text-ink-soft">Le lien s'ouvre dans un nouvel onglet. Saisissez le montant ci-dessus, il n'est pas pré-rempli.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -92,6 +151,8 @@ function PaymentBlock({ payment, token, declaredAt, onDeclared }: { payment: Pay
       </div>
 
       <p className="text-xs text-ink-muted">{fr.payment.reminder}</p>
+
+      <ChangeMethod payment={payment} token={token} onChanged={onDeclared} />
 
       <div className="border-t border-line pt-4">
         {declaredAt ? (
@@ -170,12 +231,12 @@ function KeepLink({ view, url }: { view: ReservationView; url: string }) {
       <p className="rounded-xl bg-paper px-3 py-2 font-mono text-xs break-all select-all">{url}</p>
       <div className="flex flex-wrap gap-2">
         <CopyButton value={url} label="Copier le lien" size="md" variant="soft" />
-        <LinkButton
-          href={whatsappUrl(`Mon lien de suivi Nahe? pour « ${view.event.title} » (${view.reference}) : ${url}`)}
+        <ShareButton
+          text={`Mon lien de suivi Nahe? pour « ${view.event.title} » (${view.reference}) : ${url}`}
+          label="M'envoyer ce lien"
           variant="secondary"
-        >
-          <span aria-hidden="true">💬</span> M'envoyer ce lien
-        </LinkButton>
+          size="md"
+        />
       </div>
     </Card>
   )
@@ -232,7 +293,11 @@ export default function TrackingPage() {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-bold">{view.event.title}</h2>
-            <p className="text-sm text-ink-soft">{formatEventDate(view.event.startsAt)} · {view.event.location}</p>
+            <p className="text-sm text-ink-soft">{formatEventSchedule(view.event.startsAt, view.event.endsAt)}</p>
+            <p className="text-sm text-ink-soft">
+              <span className="font-semibold text-ink">{view.event.location}</span>
+              {view.event.address && <> · <AddressLink address={view.event.address} /></>}
+            </p>
           </div>
           <ReservationBadge status={view.status} />
         </div>
@@ -243,6 +308,12 @@ export default function TrackingPage() {
         <dl className="grid grid-cols-2 gap-4 border-t border-line pt-4 text-sm">
           <div><dt className="text-ink-muted">Au nom de</dt><dd className="font-semibold">{view.firstName} {view.lastName}</dd></div>
           <div><dt className="text-ink-muted">Places</dt><dd className="font-semibold">{view.quantity}</dd></div>
+          {view.guests.length > 0 && (
+            <div className="col-span-2">
+              <dt className="text-ink-muted">Participants</dt>
+              <dd className="font-semibold">{[`${view.firstName} ${view.lastName}`, ...view.guests.map((g) => `${g.firstName} ${g.lastName}`)].join(', ')}</dd>
+            </div>
+          )}
           <div>
             <dt className="text-ink-muted">Montant total</dt>
             <dd className="font-display text-xl font-extrabold">{view.totalAmountCents === 0 ? 'Gratuit' : formatEuros(view.totalAmountCents)}</dd>

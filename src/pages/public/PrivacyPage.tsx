@@ -26,7 +26,7 @@ export default function PrivacyPage() {
           <li>votre adresse e-mail ;</li>
           <li>votre numéro de téléphone, uniquement si vous le renseignez (facultatif) ;</li>
           <li>le nombre de places réservées et le montant correspondant ;</li>
-          <li>le moyen de paiement choisi (Wero ou PayPal) ;</li>
+          <li>le moyen de paiement choisi (Wero, PayPal ou Revolut) ;</li>
           <li>pour chaque place confirmée, un billet : un identifiant signé, son état (valide, utilisé, annulé) et l'heure d'entrée le cas échéant.</li>
         </ul>
       </Section>
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
       <Section title="Pourquoi ces données">
         <p>Elles servent uniquement à organiser l'événement : savoir qui vient, combien de places sont prises et vérifier les paiements.</p>
         <p>
-          Nous n'utilisons aucune API de paiement : vous payez directement l'organisateur via Wero ou PayPal, et il vérifie lui-même la réception.
+          Nous n'utilisons aucune API de paiement : vous payez directement l'organisateur via Wero, PayPal ou Revolut, et il vérifie lui-même la réception.
           Aucune donnée bancaire ne transite par ce site.
         </p>
         <p>
