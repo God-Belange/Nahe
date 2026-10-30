@@ -14,6 +14,7 @@ export async function resetDatabase() {
     env.DB.prepare('DELETE FROM reservations'),
     env.DB.prepare('DELETE FROM events'),
     env.DB.prepare('DELETE FROM payment_settings'),
+    env.DB.prepare('DELETE FROM images'),
     env.DB.prepare('DELETE FROM admin_sessions'),
     env.DB.prepare('DELETE FROM rate_limits'),
   ])
@@ -26,6 +27,8 @@ export interface ApiOptions {
   cookie?: string
   csrf?: string
   origin?: string | null
+  raw?: Uint8Array<ArrayBuffer>
+  contentType?: string
 }
 
 let ipCounter = 0
@@ -36,6 +39,7 @@ export async function api(path: string, opts: ApiOptions = {}) {
   const method = opts.method ?? 'GET'
   if (opts.origin !== null && method !== 'GET') headers.set('Origin', opts.origin ?? ORIGIN)
   if (opts.body !== undefined) headers.set('Content-Type', 'application/json')
+  if (opts.raw) headers.set('Content-Type', opts.contentType ?? 'application/octet-stream')
   if (opts.cookie) headers.set('Cookie', opts.cookie)
   if (opts.csrf) headers.set('X-CSRF-Token', opts.csrf)
   const res = await exports.default.fetch(
@@ -43,6 +47,7 @@ export async function api(path: string, opts: ApiOptions = {}) {
       method,
       headers,
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+      ...(opts.raw ? { body: opts.raw } : {}),
     }),
   )
   const text = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(await res.arrayBuffer())
@@ -97,7 +102,9 @@ export async function configurePayments() {
     {
       weroInstructions: 'Envoyez le montant au 06 12 34 56 78 via Wero.',
       weroQrImageUrl: '/images/wero-qr.svg',
+      weroContact: '06 12 34 56 78',
       paypalMeUrl: 'https://paypal.me/samtest',
+      revolutMeUrl: 'https://revolut.me/samtest',
       pendingTtlHours: 24,
     },
     new Date(),
@@ -117,11 +124,13 @@ export async function makeEvent(
 
 let emailCounter = 0
 export function reservationBody(overrides: Record<string, unknown> = {}) {
+  const quantity = typeof overrides.quantity === 'number' ? overrides.quantity : 1
   return {
     firstName: 'Camille',
     lastName: 'Durand',
     email: `invite${++emailCounter}@example.com`,
     quantity: 1,
+    guests: Array.from({ length: Math.max(0, quantity - 1) }, (_, i) => ({ firstName: `Invité${i + 2}`, lastName: 'Durand' })),
     paymentMethod: 'wero',
     ...overrides,
   }

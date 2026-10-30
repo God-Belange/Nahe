@@ -244,3 +244,47 @@ describe('modification partielle (PATCH)', () => {
     expect(res.json.bookingDeadline).toBeNull()
   })
 })
+
+describe('adresse du lieu et affichage des places restantes', () => {
+  it('valeurs par défaut : adresse vide, compteur affiché', async () => {
+    const event = await makeEvent()
+    const res = await api(`/events/${event.slug}`)
+    expect(res.json).toMatchObject({ location: '12 rue des Lilas, Lille', address: '', showRemaining: true })
+  })
+
+  it('crée puis modifie le nom, l\'adresse et l\'option du compteur', async () => {
+    const admin = await login()
+    const created = await adminApi(admin, '/events', {
+      method: 'POST',
+      body: eventInput({ location: 'Chez Sam', address: ' 12 rue des Lilas, 59000 Lille ', showRemaining: false }),
+    })
+    expect(created.status).toBe(201)
+    expect(created.json).toMatchObject({ location: 'Chez Sam', address: '12 rue des Lilas, 59000 Lille', showRemaining: false })
+
+    const patched = await adminApi(admin, `/events/${created.json.id}`, {
+      method: 'PATCH',
+      body: { showRemaining: true, address: '' },
+    })
+    expect(patched.status).toBe(200)
+    expect(patched.json).toMatchObject({ location: 'Chez Sam', address: '', showRemaining: true })
+  })
+
+  it('refuse une option non booléenne ou une adresse trop longue', async () => {
+    const admin = await login()
+    const res = await adminApi(admin, '/events', {
+      method: 'POST',
+      body: eventInput({ showRemaining: 'non', address: 'x'.repeat(301) }),
+    })
+    expect(res.status).toBe(422)
+    expect(res.json.error.fields.showRemaining).toBeDefined()
+    expect(res.json.error.fields.address).toBeDefined()
+  })
+
+  it('expose l\'adresse sur le suivi de réservation', async () => {
+    await configurePayments()
+    const event = await makeEvent({ location: 'Chez Sam', address: '12 rue des Lilas, Lille' })
+    const { data } = await reserve(event.id)
+    const tracking = await api(`/reservations/${data.accessToken}`)
+    expect(tracking.json.event).toMatchObject({ location: 'Chez Sam', address: '12 rue des Lilas, Lille' })
+  })
+})

@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { reservationInputSchema } from '../shared/schemas'
 import { getDb } from '../worker/lib/db'
+import { savePaymentSettings } from '../worker/services/settings'
 import {
   cancelReservation,
   confirmReservation,
@@ -45,6 +46,14 @@ describe('réservation payante', () => {
     expect(res.data.reservation.payment?.paypalUrl).toBe('https://paypal.me/samtest/25.00EUR')
   })
 
+  it('fournit le lien Revolut.me (sans montant)', async () => {
+    await configurePayments()
+    const event = await makeEvent({ priceCents: 1250 })
+    const res = await reserve(event.id, { quantity: 2, paymentMethod: 'revolut' })
+    expect(res.status).toBe(201)
+    expect(res.data.reservation.payment).toMatchObject({ method: 'revolut', amountCents: 2500, revolutUrl: 'https://revolut.me/samtest' })
+  })
+
   it('ne stocke que le hash du jeton d\'accès', async () => {
     await configurePayments()
     const event = await makeEvent()
@@ -77,6 +86,27 @@ describe('réservation payante', () => {
     expect(Object.keys(res.json.error.fields)).toEqual(
       expect.arrayContaining(['firstName', 'lastName', 'email', 'phone', 'quantity']),
     )
+  })
+
+  it('refuse plusieurs places sans le nom de chaque participant', async () => {
+    await configurePayments()
+    const event = await makeEvent()
+    const res = await api(`/events/${event.id}/reservations`, {
+      method: 'POST',
+      body: { ...reservationBody({ quantity: 3 }), guests: [{ firstName: 'Ana', lastName: 'Durand' }] },
+    })
+    expect(res.status).toBe(422)
+    expect(Object.keys(res.json.error.fields)).toEqual(['guests.1.firstName', 'guests.1.lastName'])
+  })
+
+  it('enregistre les participants et les restitue dans le suivi', async () => {
+    await configurePayments()
+    const event = await makeEvent()
+    const res = await reserve(event.id, { quantity: 2, guests: [{ firstName: 'Ana', lastName: 'Durand' }] })
+    expect(res.status).toBe(201)
+    expect(res.data.reservation.guests).toEqual([{ firstName: 'Ana', lastName: 'Durand' }])
+    const view = await api(`/reservations/${res.data.accessToken}`)
+    expect(view.json.guests).toEqual([{ firstName: 'Ana', lastName: 'Durand' }])
   })
 
   it('normalise le téléphone', async () => {
@@ -308,6 +338,52 @@ describe('suivi de réservation', () => {
     const list = await adminApi(admin, '/reservations')
     expect(list.json.items[0].paymentDeclaredAt).not.toBeNull()
     expect(list.json.items[0].status).toBe('pending')
+  })
+
+  it('permet de changer de moyen de paiement tant que la réservation est en attente', async () => {
+    await configurePayments()
+    const event = await makeEvent()
+    const { data } = await reserve(event.id, { paymentMethod: 'wero' })
+    expect(data.reservation.payment?.weroContact).toBe('06 12 34 56 78')
+    expect(data.reservation.payment?.availableMethods).toEqual(['wero', 'paypal', 'revolut'])
+    await api(`/reservations/${data.accessToken}/declare-payment`, { method: 'POST' })
+
+    const res = await api(`/reservations/${data.accessToken}/payment-method`, {
+      method: 'POST',
+      body: { paymentMethod: 'paypal' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.json.paymentMethod).toBe('paypal')
+    expect(res.json.paymentDeclaredAt).toBeNull()
+    expect(res.json.payment.paypalUrl).toContain('paypal.me/samtest')
+    const admin = await login()
+    expect((await adminApi(admin, '/reservations')).json.items[0].paymentMethod).toBe('paypal')
+  })
+
+  it('Wero reste proposé avec seulement un contact, et pas sans rien', async () => {
+    const db = getDb(env.DB)
+    const base = { weroInstructions: '', weroQrImageUrl: null, weroContact: '06 00 00 00 00', paypalMeUrl: null, revolutMeUrl: null, pendingTtlHours: 24 }
+    await savePaymentSettings(db, base, new Date())
+    const event = await makeEvent()
+    const { data } = await reserve(event.id, { paymentMethod: 'wero' })
+    expect(data.reservation.payment?.weroContact).toBe('06 00 00 00 00')
+    await savePaymentSettings(db, { ...base, weroContact: null }, new Date())
+    expect((await reserve(event.id, { paymentMethod: 'wero' })).status).toBe(422)
+  })
+
+  it('refuse un moyen indisponible, inconnu, ou une réservation qui n\'attend plus de paiement', async () => {
+    await configurePayments()
+    const event = await makeEvent()
+    const { data } = await reserve(event.id)
+    const change = (token: string, paymentMethod: string) =>
+      api(`/reservations/${token}/payment-method`, { method: 'POST', body: { paymentMethod } })
+    expect((await change(data.accessToken, 'bitcoin')).status).toBe(422)
+    expect((await change('jeton-invalide', 'paypal')).status).toBe(404)
+
+    const admin = await login()
+    const id = (await adminApi(admin, '/reservations')).json.items[0].id
+    await adminApi(admin, `/reservations/${id}/confirm`, { method: 'POST' })
+    expect((await change(data.accessToken, 'paypal')).status).toBe(409)
   })
 
   it('régénérer le lien invalide l\'ancien jeton', async () => {

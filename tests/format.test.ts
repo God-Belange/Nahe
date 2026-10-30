@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   centsToInput,
   formatEuros,
+  formatEventSchedule,
+  formatTimeRange,
   formatRemaining,
   isoToParisLocal,
   parseEurosToCents,
@@ -42,5 +44,22 @@ describe('temps restant', () => {
     expect(formatRemaining('2026-06-01T12:12:00Z', now)).toBe('12 min')
     expect(formatRemaining('2026-06-02T11:50:00Z', now)).toBe('23 h 50')
     expect(formatRemaining('2026-06-01T14:00:00Z', now)).toBe('2 h')
+  })
+})
+
+describe('horaires de l\'événement', () => {
+  const start = '2026-11-14T18:00:00Z' // samedi 19h (Paris)
+  it('écrit le jour puis « de 19h à 2h » sans date de fin', () => {
+    expect(formatEventSchedule(start, '2026-11-15T01:00:00Z')).toBe('Samedi 14 novembre, de 19h à 2h')
+  })
+  it('garde les minutes et écrit « minuit »', () => {
+    expect(formatEventSchedule('2026-11-14T18:30:00Z', '2026-11-14T23:00:00Z')).toBe('Samedi 14 novembre, de 19h30 à minuit')
+  })
+  it('sans heure de fin', () => {
+    expect(formatEventSchedule(start, null)).toBe('Samedi 14 novembre à 19h')
+    expect(formatTimeRange(start, null)).toBe('19h')
+  })
+  it('indique les deux jours au-delà de 24 h', () => {
+    expect(formatEventSchedule(start, '2026-11-16T01:00:00Z')).toBe('Du samedi 14 novembre à 19h au lundi 16 novembre à 2h')
   })
 })

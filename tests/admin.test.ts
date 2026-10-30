@@ -246,18 +246,21 @@ describe('paramètres de paiement', () => {
         weroInstructions: 'Wero au 06…',
         weroQrImageUrl: '/images/wero-qr.png',
         paypalMeUrl: 'https://www.paypal.me/monCompte',
+        revolutMeUrl: 'https://revolut.me/monCompte',
         pendingTtlHours: 48,
       },
     })
     expect(put.status).toBe(200)
     const get = await adminApi(admin, '/payment-settings')
-    expect(get.json).toMatchObject({ pendingTtlHours: 48, weroQrImageUrl: '/images/wero-qr.png' })
+    expect(get.json).toMatchObject({ pendingTtlHours: 48, weroQrImageUrl: '/images/wero-qr.png', revolutMeUrl: 'https://revolut.me/monCompte' })
   })
 
   it.each([
     ['un autre domaine', { paypalMeUrl: 'https://evil.example/paypal.me/x' }, 'paypalMeUrl'],
     ['un faux sous-domaine', { paypalMeUrl: 'https://paypal.me.evil.example/x' }, 'paypalMeUrl'],
     ['HTTP', { paypalMeUrl: 'http://paypal.me/x' }, 'paypalMeUrl'],
+    ['un autre domaine Revolut', { revolutMeUrl: 'https://evil.example/revolut.me/x' }, 'revolutMeUrl'],
+    ['Revolut en HTTP', { revolutMeUrl: 'http://revolut.me/x' }, 'revolutMeUrl'],
     ['une image externe', { weroQrImageUrl: 'https://evil.example/qr.png' }, 'weroQrImageUrl'],
     ['un chemin avec ..', { weroQrImageUrl: '/images/../secret' }, 'weroQrImageUrl'],
     ['un délai nul', { pendingTtlHours: 0 }, 'pendingTtlHours'],

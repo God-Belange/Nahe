@@ -219,6 +219,7 @@ describe('contrôle d\'entrée', () => {
     expect(res.checkedIn).toBe(1)
     expect(res.items.map((i) => i.state)).toEqual(['used', 'valid', 'valid'])
     expect(res.items[0]).toMatchObject({ holderName: 'Zoé Martin', seq: 1, total: 3 })
+    expect(res.items.map((i) => i.holderName)).toEqual(['Zoé Martin', 'Invité2 Durand', 'Invité3 Durand'])
   })
 
   it('les routes billets exigent une session admin et un jeton CSRF', async () => {
@@ -236,11 +237,13 @@ describe('pages et images publiques du billet', () => {
   it('la page billet n\'expose que le prénom, le numéro et l\'événement', async () => {
     await configurePayments()
     const event = await makeEvent({ capacity: 10 })
-    const { view } = await reserveAndConfirm(event.id, { quantity: 2, firstName: 'Léa', lastName: 'Confidentielle', email: 'lea.secret@example.com', phone: '0611223344' })
+    const { view } = await reserveAndConfirm(event.id, { quantity: 2, firstName: 'Léa', lastName: 'Confidentielle', email: 'lea.secret@example.com', phone: '0611223344', guests: [{ firstName: 'Noé', lastName: 'Secret' }] })
     const res = await api(`/tickets/${view.tickets[1]!.token}`)
+    expect((res.json as PublicTicket).holderFirstName).toBe('Noé')
+    expect((await api(`/tickets/${view.tickets[0]!.token}`)).json.holderFirstName).toBe('Léa')
     expect(res.status).toBe(200)
     const body = res.json as PublicTicket
-    expect(body).toMatchObject({ seq: 2, total: 2, holderFirstName: 'Léa', state: 'valid' })
+    expect(body).toMatchObject({ seq: 2, total: 2, state: 'valid' })
     expect(res.text).not.toMatch(/Confidentielle|lea\.secret|0611223344|\+33611223344/)
     expect((await api('/tickets/jeton-invalide')).status).toBe(404)
   })
@@ -433,7 +436,9 @@ describe('e-mail des billets', () => {
       origin: 'https://nahe.test',
       eventTitle: '<img src=x onerror=alert(1)>',
       eventStartsAt: daysFromNow(10),
+      eventEndsAt: null,
       eventLocation: 'Salle "Z" & <b>Co</b>',
+      eventAddress: '1 rue <i>X</i>',
       firstName: '<script>alert(1)</script>',
       reference: 'NAHE-ABC234',
       tickets: [{ seq: 1, token: 'abc.def' }],
@@ -441,6 +446,8 @@ describe('e-mail des billets', () => {
     expect(html).not.toContain('<script>')
     expect(html).not.toContain('<img src=x')
     expect(html).not.toContain('<b>Co</b>')
+    expect(html).not.toContain('<i>X</i>')
+    expect(html).toContain('href="https://www.google.com/maps/search/?api=1&#38;query=1%20rue%20%3Ci%3EX%3C%2Fi%3E"')
     expect(html).toContain('&#60;script&#62;')
   })
 

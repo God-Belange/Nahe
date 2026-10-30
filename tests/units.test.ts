@@ -4,6 +4,7 @@ import { addHours, bookingBlockReason } from '../shared/booking'
 import { centsToDecimalString } from '../shared/money'
 import { normalizePhone } from '../shared/phone'
 import { buildPaypalLink, parsePaypalMe } from '../shared/paypal'
+import { buildRevolutLink, parseRevolutMe } from '../shared/revolut'
 import { checkEventDates, createEventSchema, reservationInputSchema } from '../shared/schemas'
 import {
   hashPassword,
@@ -30,6 +31,22 @@ describe('téléphone', () => {
   it.each(['', 'abc', '123', '+0612345678'])('rejette %j', (input) =>
     expect(normalizePhone(input)).toBeNull(),
   )
+})
+
+describe('Revolut.me', () => {
+  it('accepte uniquement https://revolut.me', () => {
+    expect(parseRevolutMe('https://revolut.me/sam')).toEqual({ account: 'sam' })
+    expect(parseRevolutMe('https://www.revolut.me/sam?x=1')).toEqual({ account: 'sam' })
+    expect(parseRevolutMe('http://revolut.me/sam')).toBeNull()
+    expect(parseRevolutMe('https://revolut.me.evil.com/sam')).toBeNull()
+    expect(parseRevolutMe('https://evil.com/revolut.me/sam')).toBeNull()
+    expect(parseRevolutMe('https://revolut.me/')).toBeNull()
+    expect(parseRevolutMe('https://revolut.me/sa<m>')).toBeNull()
+  })
+  it('normalise le lien sans montant', () => {
+    expect(buildRevolutLink('https://www.revolut.me/sam?amount=1')).toBe('https://revolut.me/sam')
+    expect(buildRevolutLink('https://evil.com/sam')).toBeNull()
+  })
 })
 
 describe('PayPal.Me', () => {
@@ -79,9 +96,22 @@ describe('règles d\'ouverture', () => {
 
 describe('schémas partagés', () => {
   it('normalise l\'e-mail, le téléphone et les valeurs par défaut', () => {
-    const r = reservationInputSchema.parse({ firstName: ' Ana ', lastName: 'B', email: ' ANA@Example.COM ', phone: '', quantity: 2 })
-    expect(r).toMatchObject({ firstName: 'Ana', email: 'ana@example.com', phone: null, quantity: 2, paymentMethod: null })
+    const r = reservationInputSchema.parse({ firstName: ' Ana ', lastName: 'B', email: ' ANA@Example.COM ', phone: '', quantity: 2, guests: [{ firstName: ' Bob ', lastName: 'C' }] })
+    expect(r).toMatchObject({ firstName: 'Ana', email: 'ana@example.com', phone: null, quantity: 2, paymentMethod: null, guests: [{ firstName: 'Bob', lastName: 'C' }] })
     expect(reservationInputSchema.parse({ firstName: 'a', lastName: 'b', email: 'a@b.fr' }).quantity).toBe(1)
+  })
+
+  it('exige le prénom et le nom de chaque place au-delà de la première', () => {
+    const base = { firstName: 'a', lastName: 'b', email: 'a@b.fr', quantity: 3 }
+    const none = reservationInputSchema.safeParse(base)
+    expect(none.success).toBe(false)
+    expect(none.error!.issues.map((i) => i.path.join('.'))).toEqual(
+      ['guests.0.firstName', 'guests.0.lastName', 'guests.1.firstName', 'guests.1.lastName'],
+    )
+    const partial = reservationInputSchema.safeParse({ ...base, guests: [{ firstName: 'c', lastName: 'd' }, { firstName: '', lastName: 'e' }] })
+    expect(partial.error!.issues.map((i) => i.path.join('.'))).toEqual(['guests.1.firstName'])
+    expect(reservationInputSchema.safeParse({ ...base, quantity: 1, guests: [{ firstName: 'c', lastName: 'd' }] }).success).toBe(false)
+    expect(reservationInputSchema.safeParse({ ...base, guests: [{ firstName: 'c', lastName: 'd' }, { firstName: 'e', lastName: 'f' }] }).success).toBe(true)
   })
 
   it('refuse un moyen de paiement inconnu et une clé d\'idempotence invalide', () => {
