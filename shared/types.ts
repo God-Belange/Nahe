@@ -17,11 +17,15 @@ export interface PublicEvent {
   description: string
   coverImageUrl: string | null
   location: string
+  /** adresse postale du lieu (vide si non renseignée) */
+  address: string
   startsAt: string
   endsAt: string | null
   priceCents: number
   capacity: number
   remaining: number
+  /** false : l'organisateur ne souhaite pas afficher le nombre de places restantes */
+  showRemaining: boolean
   bookingDeadline: string | null
   extraInfo: string
   status: EventStatus
@@ -36,9 +40,18 @@ export interface PaymentInstructions {
   method: PaymentMethod
   amountCents: number
   reference: string
+  /** moyens de paiement actuellement proposés (pour en changer) */
+  availableMethods: PaymentMethod[]
   weroInstructions?: string
   weroQrImageUrl?: string | null
+  weroContact?: string | null
   paypalUrl?: string | null
+  revolutUrl?: string | null
+}
+
+export interface Guest {
+  firstName: string
+  lastName: string
 }
 
 export interface ReservationView {
@@ -47,6 +60,8 @@ export interface ReservationView {
   lastName: string
   email: string
   quantity: number
+  /** participants des places 2 à N */
+  guests: Guest[]
   totalAmountCents: number
   paymentMethod: PaymentMethod | null
   status: ReservationStatus
@@ -55,7 +70,7 @@ export interface ReservationView {
   createdAt: string
   event: Pick<
     PublicEvent,
-    'title' | 'slug' | 'startsAt' | 'location' | 'coverImageUrl' | 'status'
+    'title' | 'slug' | 'startsAt' | 'endsAt' | 'location' | 'address' | 'coverImageUrl' | 'status'
   >
   /** présent uniquement tant que la réservation attend un paiement */
   payment: PaymentInstructions | null
@@ -79,7 +94,7 @@ export interface PublicTicket {
   holderFirstName: string
   state: TicketState
   token: string
-  event: Pick<PublicEvent, 'title' | 'slug' | 'startsAt' | 'location' | 'coverImageUrl' | 'status'>
+  event: Pick<PublicEvent, 'title' | 'slug' | 'startsAt' | 'endsAt' | 'location' | 'address' | 'coverImageUrl' | 'status'>
 }
 
 export type ScanResult =
@@ -163,6 +178,7 @@ export interface AdminReservation {
   email: string
   phone: string | null
   quantity: number
+  guests: Guest[]
   totalAmountCents: number
   paymentMethod: PaymentMethod | null
   status: ReservationStatus
@@ -196,7 +212,9 @@ export interface DashboardStats {
 export interface PaymentSettings {
   weroInstructions: string
   weroQrImageUrl: string | null
+  weroContact: string | null
   paypalMeUrl: string | null
+  revolutMeUrl: string | null
   pendingTtlHours: number
   updatedAt: string | null
 }

@@ -9,6 +9,7 @@ import {
 } from './constants'
 import { normalizePhone } from './phone'
 import { parsePaypalMe } from './paypal'
+import { parseRevolutMe } from './revolut'
 
 const trimmed = (min: number, max: number) => z.string().trim().min(min).max(max)
 
@@ -21,38 +22,59 @@ const imagePath = z
   .string()
   .trim()
   .max(200)
-  .refine((v) => /^\/images\/[A-Za-z0-9._/-]+$/.test(v) && !v.includes('..'), {
-    message: 'Chemin invalide : il doit commencer par /images/',
-  })
+  .refine(
+    (v) =>
+      (/^\/images\/[A-Za-z0-9._/-]+$/.test(v) && !v.includes('..')) ||
+      /^\/api\/images\/[A-Za-z0-9_-]{16,64}$/.test(v),
+    { message: 'Chemin invalide : il doit commencer par /images/' },
+  )
 
 const emptyToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v)
 
-export const reservationInputSchema = z.object({
+export const guestSchema = z.object({
   firstName: trimmed(1, 80),
   lastName: trimmed(1, 80),
-  email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
-  phone: z
-    .preprocess(
-      emptyToNull,
-      z
-        .string()
-        .max(30)
-        .transform((v, ctx) => {
-          const normalized = normalizePhone(v)
-          if (normalized === null) {
-            ctx.addIssue({ code: 'custom', message: 'Numéro de téléphone invalide' })
-            return z.NEVER
-          }
-          return normalized
-        })
-        .nullable()
-        .optional(),
-    )
-    .transform((v) => v ?? null),
-  quantity: z.number().int().min(1).max(100).default(1),
-  paymentMethod: z.enum(PAYMENT_METHODS).nullish().transform((v) => v ?? null),
-  idempotencyKey: z.uuid().nullish().transform((v) => v ?? null),
 })
+
+export const reservationInputSchema = z
+  .object({
+    firstName: trimmed(1, 80),
+    lastName: trimmed(1, 80),
+    email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
+    phone: z
+      .preprocess(
+        emptyToNull,
+        z
+          .string()
+          .max(30)
+          .transform((v, ctx) => {
+            const normalized = normalizePhone(v)
+            if (normalized === null) {
+              ctx.addIssue({ code: 'custom', message: 'Numéro de téléphone invalide' })
+              return z.NEVER
+            }
+            return normalized
+          })
+          .nullable()
+          .optional(),
+      )
+      .transform((v) => v ?? null),
+    quantity: z.number().int().min(1).max(100).default(1),
+    /** Prénom et nom des places 2 à N (la place 1 est celle du titulaire de la réservation). */
+    guests: z.array(guestSchema).max(99).default([]),
+    paymentMethod: z.enum(PAYMENT_METHODS).nullish().transform((v) => v ?? null),
+    idempotencyKey: z.uuid().nullish().transform((v) => v ?? null),
+  })
+  .superRefine((v, ctx) => {
+    const expected = v.quantity - 1
+    if (v.guests.length > expected) {
+      ctx.addIssue({ code: 'custom', path: ['guests'], message: 'Trop de participants pour ce nombre de places' })
+    }
+    for (let i = v.guests.length; i < expected; i++) {
+      ctx.addIssue({ code: 'custom', path: ['guests', i, 'firstName'], message: 'Ce champ est obligatoire' })
+      ctx.addIssue({ code: 'custom', path: ['guests', i, 'lastName'], message: 'Ce champ est obligatoire' })
+    }
+  })
 export type ReservationInput = z.infer<typeof reservationInputSchema>
 
 const slugField = z.preprocess(
@@ -81,6 +103,8 @@ const optionalShape = {
   extraInfo: z.string().trim().max(2000),
   visibility: z.enum(EVENT_VISIBILITIES),
   maxPerBooking: z.number().int().min(1).max(100),
+  address: z.string().trim().max(300),
+  showRemaining: z.boolean(),
 }
 
 export interface EventDates {
@@ -108,6 +132,8 @@ export const createEventSchema = z
     extraInfo: optionalShape.extraInfo.default(''),
     visibility: optionalShape.visibility.default('public'),
     maxPerBooking: optionalShape.maxPerBooking.default(DEFAULT_MAX_PER_BOOKING),
+    address: optionalShape.address.default(''),
+    showRemaining: optionalShape.showRemaining.default(true),
     coverImageUrl: nullableImage.nullish().transform((v) => v ?? null),
     endsAt: nullableDate.nullish().transform((v) => v ?? null),
     bookingDeadline: nullableDate.nullish().transform((v) => v ?? null),
@@ -133,6 +159,10 @@ export const updateEventSchema = z
   .partial()
 export type UpdateEventInput = z.infer<typeof updateEventSchema>
 
+export const changePaymentMethodSchema = z.object({
+  paymentMethod: z.enum(PAYMENT_METHODS),
+})
+
 export const loginSchema = z.object({
   password: z.string().min(1).max(200),
 })
@@ -141,6 +171,9 @@ export const paymentSettingsSchema = z.object({
   weroInstructions: z.string().trim().max(1000).default(''),
   weroQrImageUrl: z
     .preprocess(emptyToNull, imagePath.nullable().optional())
+    .transform((v) => v ?? null),
+  weroContact: z
+    .preprocess(emptyToNull, z.string().trim().max(100).nullable().optional())
     .transform((v) => v ?? null),
   paypalMeUrl: z
     .preprocess(
@@ -151,6 +184,20 @@ export const paymentSettingsSchema = z.object({
         .max(200)
         .refine((v) => parsePaypalMe(v) !== null, {
           message: 'Lien PayPal.Me invalide (https://paypal.me/votrecompte)',
+        })
+        .nullable()
+        .optional(),
+    )
+    .transform((v) => v ?? null),
+  revolutMeUrl: z
+    .preprocess(
+      emptyToNull,
+      z
+        .string()
+        .trim()
+        .max(200)
+        .refine((v) => parseRevolutMe(v) !== null, {
+          message: 'Lien Revolut.me invalide (https://revolut.me/votrecompte)',
         })
         .nullable()
         .optional(),
