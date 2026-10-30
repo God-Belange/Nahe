@@ -15,6 +15,48 @@
       "when": 1793258856923,
       "tag": "0001_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793273247055,
+      "tag": "0002_event_address_show_remaining",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793280457680,
+      "tag": "0003_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793283543603,
+      "tag": "0004_revolut_me_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793378765793,
+      "tag": "0005_wero_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793378908830,
+      "tag": "0006_reservation_guests",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793379892360,
+      "tag": "0007_wero_contact",
+      "breakpoints": true
     }
   ]
 }

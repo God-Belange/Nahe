@@ -1,0 +1,1 @@
+ALTER TABLE `payment_settings` ADD `revolut_me_url` text;

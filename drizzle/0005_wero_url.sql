@@ -1,0 +1,1 @@
+ALTER TABLE `payment_settings` ADD `wero_url` text;

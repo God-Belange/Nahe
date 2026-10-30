@@ -21,6 +21,8 @@ export const events = sqliteTable(
     description: text('description').notNull().default(''),
     coverImageUrl: text('cover_image_url'),
     location: text('location').notNull(),
+    address: text('address').notNull().default(''),
+    showRemaining: integer('show_remaining', { mode: 'boolean' }).notNull().default(true),
     startsAt: text('starts_at').notNull(),
     endsAt: text('ends_at'),
     priceCents: integer('price_cents').notNull(),
@@ -59,8 +61,9 @@ export const reservations = sqliteTable(
     email: text('email').notNull(),
     phone: text('phone'),
     quantity: integer('quantity').notNull(),
+    guests: text('guests'),
     totalAmountCents: integer('total_amount_cents').notNull(),
-    paymentMethod: text('payment_method', { enum: ['wero', 'paypal'] }),
+    paymentMethod: text('payment_method', { enum: ['wero', 'paypal', 'revolut'] }),
     paymentStatus: text('payment_status', {
       enum: ['pending', 'confirmed', 'cancelled', 'expired'],
     }).notNull(),
@@ -115,7 +118,9 @@ export const paymentSettings = sqliteTable('payment_settings', {
   id: integer('id').primaryKey(),
   weroInstructions: text('wero_instructions').notNull().default(''),
   weroQrImageUrl: text('wero_qr_image_url'),
+  weroContact: text('wero_contact'),
   paypalMeUrl: text('paypal_me_url'),
+  revolutMeUrl: text('revolut_me_url'),
   pendingTtlHours: integer('pending_ttl_hours').notNull().default(24),
   updatedAt: text('updated_at').notNull(),
 })
@@ -137,3 +142,12 @@ export const rateLimits = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 )
+
+/** Images téléversées depuis l'admin (réduites côté navigateur), stockées en base64 pour rester dans D1. */
+export const images = sqliteTable('images', {
+  id: text('id').primaryKey(),
+  contentType: text('content_type', { enum: ['image/jpeg', 'image/png', 'image/webp'] }).notNull(),
+  data: text('data').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  createdAt: text('created_at').notNull(),
+})
