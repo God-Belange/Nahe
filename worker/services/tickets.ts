@@ -1,4 +1,5 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
+import { fullName, parseGuests, ticketHolder } from '../../shared/guests'
 import type {
   EventTickets,
   PublicTicket,
@@ -16,6 +17,9 @@ import { notFound } from '../lib/errors'
 type TicketRow = typeof tickets.$inferSelect
 type ReservationRow = typeof reservations.$inferSelect
 type EventRow = typeof events.$inferSelect
+
+const holderOf = (r: ReservationRow, seq: number) =>
+  ticketHolder(r, parseGuests(r.guests), seq)
 
 const SIGNATURE_LENGTH = 32
 
@@ -109,14 +113,16 @@ export async function getPublicTicket(env: Env, token: string): Promise<PublicTi
   return {
     seq: ticket.seq,
     total: reservation.quantity,
-    holderFirstName: reservation.firstName,
+    holderFirstName: holderOf(reservation, ticket.seq).firstName,
     state: ticketState(ticket, reservation, event),
     token,
     event: {
       title: event.title,
       slug: event.slug,
       startsAt: event.startsAt,
+      endsAt: event.endsAt,
       location: event.location,
+      address: event.address,
       coverImageUrl: event.coverImageUrl,
       status: event.status,
     },
@@ -129,7 +135,7 @@ function toScanInfo(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>): S
     ticketId: ticket.id,
     seq: ticket.seq,
     total: reservation.quantity,
-    holderName: `${reservation.firstName} ${reservation.lastName}`.trim(),
+    holderName: fullName(holderOf(reservation, ticket.seq)),
     reference: reservation.reference,
     eventId: event.id,
     eventTitle: event.title,
@@ -207,7 +213,7 @@ export async function listEventTickets(env: Env, eventId: string): Promise<Event
     ticketId: ticket.id,
     seq: ticket.seq,
     total: reservation.quantity,
-    holderName: `${reservation.firstName} ${reservation.lastName}`.trim(),
+    holderName: fullName(holderOf(reservation, ticket.seq)),
     reference: reservation.reference,
     state: ticketState(ticket, reservation, event),
     checkedInAt: ticket.checkedInAt,

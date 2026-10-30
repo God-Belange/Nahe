@@ -1,7 +1,9 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { bookingBlockReason, BLOCK_REASON_MESSAGES, addHours } from '../../shared/booking'
-import type { ReservationStatus } from '../../shared/constants'
+import type { PaymentMethod, ReservationStatus } from '../../shared/constants'
+import { parseGuests } from '../../shared/guests'
 import { buildPaypalLink } from '../../shared/paypal'
+import { buildRevolutLink } from '../../shared/revolut'
 import type { ReservationInput } from '../../shared/schemas'
 import type {
   AdminReservation,
@@ -57,16 +59,20 @@ function buildView(
       method: row.paymentMethod,
       amountCents: row.totalAmountCents,
       reference: row.reference,
+      availableMethods: availablePaymentMethods(settings),
       ...(row.paymentMethod === 'wero'
         ? {
             weroInstructions: settings.weroInstructions,
             weroQrImageUrl: settings.weroQrImageUrl,
+            weroContact: settings.weroContact,
           }
-        : {
-            paypalUrl: settings.paypalMeUrl
-              ? buildPaypalLink(settings.paypalMeUrl, row.totalAmountCents)
-              : null,
-          }),
+        : row.paymentMethod === 'revolut'
+          ? { revolutUrl: settings.revolutMeUrl ? buildRevolutLink(settings.revolutMeUrl) : null }
+          : {
+              paypalUrl: settings.paypalMeUrl
+                ? buildPaypalLink(settings.paypalMeUrl, row.totalAmountCents)
+                : null,
+            }),
     }
   }
   return {
@@ -75,6 +81,7 @@ function buildView(
     lastName: row.lastName,
     email: row.email,
     quantity: row.quantity,
+    guests: parseGuests(row.guests),
     totalAmountCents: row.totalAmountCents,
     paymentMethod: row.paymentMethod,
     status,
@@ -85,7 +92,9 @@ function buildView(
       title: event.title,
       slug: event.slug,
       startsAt: event.startsAt,
+      endsAt: event.endsAt,
       location: event.location,
+      address: event.address,
       coverImageUrl: event.coverImageUrl,
       status: event.status,
     },
@@ -98,7 +107,7 @@ const INSERT_RESERVATION_SQL = `
 INSERT INTO reservations (
   id, event_id, reference, first_name, last_name, email, phone, quantity,
   total_amount_cents, payment_method, payment_status, access_token_hash, idempotency_key,
-  expires_at, confirmed_at, created_at
+  expires_at, confirmed_at, created_at, guests
 )
 SELECT
   ?1, e.id, ?2, ?3, ?4, ?5, ?6, ?7,
@@ -108,7 +117,8 @@ SELECT
   ?9, ?10,
   CASE WHEN e.price_cents = 0 THEN NULL ELSE ?11 END,
   CASE WHEN e.price_cents = 0 THEN ?12 ELSE NULL END,
-  ?12
+  ?12,
+  ?14
 FROM events e
 WHERE e.id = ?13
   AND e.status = 'published'
@@ -191,6 +201,7 @@ export async function createReservation(
           expiresAt,
           nowIso,
           eventId,
+          input.guests.length > 0 ? JSON.stringify(input.guests) : null,
         )
         .run()
       if (result.meta.changes === 0) await explainRefusal(db, event, input, now)
@@ -334,6 +345,37 @@ export async function declarePayment(
   return getReservationView(env, accessToken, now)
 }
 
+/** Permet à l'invité de changer de moyen de paiement tant que la réservation attend son paiement. */
+export async function changePaymentMethod(
+  env: Env,
+  accessToken: string,
+  method: PaymentMethod,
+  now: Date,
+): Promise<ReservationView> {
+  const db = getDb(env.DB)
+  const row = await findByToken(db, accessToken)
+  const current = row.reservation
+  if (effectiveStatus(current, now) !== 'pending' || current.totalAmountCents === 0) {
+    throw conflict('not_pending', "Cette réservation n'attend plus de paiement.")
+  }
+  const settings = await getPaymentSettings(db)
+  if (!availablePaymentMethods(settings).includes(method)) {
+    throw new ApiError(
+      422,
+      'payment_method_unavailable',
+      "Ce moyen de paiement n'est pas disponible pour le moment.",
+      { paymentMethod: "Ce moyen de paiement n'est pas disponible" },
+    )
+  }
+  if (current.paymentMethod !== method) {
+    await db
+      .update(reservations)
+      .set({ paymentMethod: method, paymentDeclaredAt: null })
+      .where(and(eq(reservations.id, current.id), eq(reservations.paymentStatus, 'pending')))
+  }
+  return getReservationView(env, accessToken, now)
+}
+
 /* ---------------------------------- Admin ---------------------------------- */
 
 function toAdminReservation(
@@ -350,6 +392,7 @@ function toAdminReservation(
     email: row.email,
     phone: row.phone,
     quantity: row.quantity,
+    guests: parseGuests(row.guests),
     totalAmountCents: row.totalAmountCents,
     paymentMethod: row.paymentMethod,
     status: row.paymentStatus,
@@ -507,7 +550,7 @@ export async function exportReservationsCsv(
 ): Promise<string> {
   const { items } = await listReservations(env, { ...filters, limit: 5000, offset: 0 }, now)
   const header = [
-    'Référence', 'Événement', 'Prénom', 'Nom', 'E-mail', 'Téléphone', 'Places',
+    'Référence', 'Événement', 'Prénom', 'Nom', 'E-mail', 'Téléphone', 'Places', 'Participants',
     'Montant (EUR)', 'Moyen de paiement', 'Statut', 'Paiement déclaré', 'Réservé le',
   ]
   const lines = items.map((r) =>
@@ -519,6 +562,7 @@ export async function exportReservationsCsv(
       r.email,
       r.phone,
       r.quantity,
+      r.guests.map((g) => `${g.firstName} ${g.lastName}`).join(', '),
       (r.totalAmountCents / 100).toFixed(2).replace('.', ','),
       r.paymentMethod,
       STATUS_LABELS[r.status],

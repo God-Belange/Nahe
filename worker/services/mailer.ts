@@ -1,5 +1,7 @@
+import { fullName, parseGuests, ticketHolder } from '../../shared/guests'
+import { mapsUrl } from '../../shared/maps'
 import type { MailResult } from '../../shared/types'
-import { formatEventDateForMail } from '../lib/mail-format'
+import { formatEventSchedule } from '../../shared/schedule'
 import { sha256Hex } from '../lib/crypto'
 import { asc, eq } from 'drizzle-orm'
 import { events, reservations, tickets } from '../db/schema'
@@ -20,22 +22,24 @@ export interface TicketsEmailInput {
   origin: string
   eventTitle: string
   eventStartsAt: string
+  eventEndsAt: string | null
   eventLocation: string
+  eventAddress: string
   firstName: string
   reference: string
-  tickets: { seq: number; token: string }[]
+  tickets: { seq: number; token: string; holder?: string }[]
 }
 
 export function buildTicketsEmail(input: TicketsEmailInput): { subject: string; html: string; text: string } {
   const total = input.tickets.length
-  const when = formatEventDateForMail(input.eventStartsAt)
+  const when = formatEventSchedule(input.eventStartsAt, input.eventEndsAt)
   const subject = `${total > 1 ? 'Vos billets' : 'Votre billet'} pour ${input.eventTitle}`
   const blocks = input.tickets
     .map((t) => {
       const page = `${input.origin}/t/${t.token}`
       const img = `${input.origin}/api/tickets/${t.token}/qr.png`
       return `<tr><td style="padding:16px 0;border-top:1px solid #e8e0f3;text-align:center">
-  <p style="margin:0 0 8px;font-weight:700">Billet ${t.seq} / ${total}</p>
+  <p style="margin:0 0 8px;font-weight:700">Billet ${t.seq} / ${total}${t.holder ? ` · ${escapeHtml(t.holder)}` : ''}</p>
   <a href="${page}"><img src="${img}" width="220" height="220" alt="QR code du billet ${t.seq} sur ${total}" style="display:block;margin:0 auto;border:0"></a>
   <p style="margin:8px 0 0"><a href="${page}" style="color:#5b35d5">Ouvrir le billet ${t.seq}</a></p>
 </td></tr>`
@@ -47,18 +51,19 @@ export function buildTicketsEmail(input: TicketsEmailInput): { subject: string; 
 <tr><td><p style="margin:0 0 4px;font-size:22px;font-weight:800">NAHE<span style="color:#ff5c4d">?</span></p>
 <p style="margin:0 0 16px">Bonjour ${escapeHtml(input.firstName)}, votre paiement est confirmé. Voici ${total > 1 ? `vos ${total} billets` : 'votre billet'} :</p>
 <p style="margin:0 0 4px;font-size:18px;font-weight:700">${escapeHtml(input.eventTitle)}</p>
-<p style="margin:0 0 2px">${escapeHtml(when)}</p><p style="margin:0 0 16px">${escapeHtml(input.eventLocation)}</p>
+<p style="margin:0 0 2px">${escapeHtml(when)}</p><p style="margin:0 0 ${input.eventAddress ? '2px' : '16px'}">${escapeHtml(input.eventLocation)}</p>${input.eventAddress ? `<p style="margin:0 0 16px;color:#675d82"><a href="${escapeHtml(mapsUrl(input.eventAddress))}" style="color:#675d82">${escapeHtml(input.eventAddress)}</a></p>` : ''}
 <p style="margin:0 0 8px;font-size:13px;color:#675d82">Référence ${escapeHtml(input.reference)}</p></td></tr>
 ${blocks}
 <tr><td style="padding-top:16px;border-top:1px solid #e8e0f3;font-size:13px;color:#675d82">
 Présentez le QR code à l'entrée (capture d'écran acceptée). <strong>Un billet = une seule entrée</strong> : chaque personne doit avoir le sien. Si les images ne s'affichent pas, ouvrez les liens ci-dessus.</td></tr>
 </table></td></tr></table></body></html>`
+  const place = input.eventAddress ? `${input.eventLocation}, ${input.eventAddress}` : input.eventLocation
   const text = [
     `Bonjour ${input.firstName}, votre paiement est confirmé.`,
-    `${input.eventTitle} — ${when} — ${input.eventLocation}`,
+    `${input.eventTitle} — ${when} — ${place}`,
     `Référence ${input.reference}`,
     '',
-    ...input.tickets.map((t) => `Billet ${t.seq}/${total} : ${input.origin}/t/${t.token}`),
+    ...input.tickets.map((t) => `Billet ${t.seq}/${total}${t.holder ? ` (${t.holder})` : ''} : ${input.origin}/t/${t.token}`),
     '',
     "Présentez le QR code à l'entrée. Un billet = une seule entrée.",
   ].join('\n')
@@ -127,14 +132,23 @@ export async function sendTicketsEmail(
       if ((await hitRateLimit(env.DB, key, DAY_MS, now)) > MAIL_PER_ADDRESS_DAILY_CAP) return 'quota'
     }
 
+    const guests = parseGuests(row.reservation.guests)
     const message = buildTicketsEmail({
       origin,
       eventTitle: row.event.title,
       eventStartsAt: row.event.startsAt,
+      eventEndsAt: row.event.endsAt,
       eventLocation: row.event.location,
+      eventAddress: row.event.address,
       firstName: row.reservation.firstName,
       reference: row.reservation.reference,
-      tickets: await Promise.all(valid.map(async (t) => ({ seq: t.seq, token: await signTicket(env, t.id) }))),
+      tickets: await Promise.all(
+        valid.map(async (t) => ({
+          seq: t.seq,
+          token: await signTicket(env, t.id),
+          ...(guests.length > 0 ? { holder: fullName(ticketHolder(row.reservation, guests, t.seq)) } : {}),
+        })),
+      ),
     })
     const ok = await postToBrevo(
       env,

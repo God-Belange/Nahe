@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { PaymentSettings } from '../../shared/types'
 import type { PaymentSettingsInput } from '../../shared/schemas'
 import { parsePaypalMe } from '../../shared/paypal'
+import { parseRevolutMe } from '../../shared/revolut'
 import { DEFAULT_PENDING_TTL_HOURS, type PaymentMethod } from '../../shared/constants'
 import { paymentSettings } from '../db/schema'
 import type { Db } from '../lib/db'
@@ -14,7 +15,9 @@ export async function getPaymentSettings(db: Db): Promise<PaymentSettings> {
     return {
       weroInstructions: '',
       weroQrImageUrl: null,
+      weroContact: null,
       paypalMeUrl: null,
+      revolutMeUrl: null,
       pendingTtlHours: DEFAULT_PENDING_TTL_HOURS,
       updatedAt: null,
     }
@@ -22,7 +25,9 @@ export async function getPaymentSettings(db: Db): Promise<PaymentSettings> {
   return {
     weroInstructions: row.weroInstructions,
     weroQrImageUrl: row.weroQrImageUrl,
+    weroContact: row.weroContact,
     paypalMeUrl: row.paypalMeUrl,
+    revolutMeUrl: row.revolutMeUrl,
     pendingTtlHours: row.pendingTtlHours,
     updatedAt: row.updatedAt,
   }
@@ -36,7 +41,9 @@ export async function savePaymentSettings(
   const values = {
     weroInstructions: input.weroInstructions,
     weroQrImageUrl: input.weroQrImageUrl,
+    weroContact: input.weroContact,
     paypalMeUrl: input.paypalMeUrl,
+    revolutMeUrl: input.revolutMeUrl,
     pendingTtlHours: input.pendingTtlHours,
     updatedAt: now.toISOString(),
   }
@@ -49,7 +56,13 @@ export async function savePaymentSettings(
 
 export function availablePaymentMethods(settings: PaymentSettings): PaymentMethod[] {
   const methods: PaymentMethod[] = []
-  if (settings.weroInstructions.trim() !== '' || settings.weroQrImageUrl) methods.push('wero')
+  if (
+    settings.weroInstructions.trim() !== '' ||
+    settings.weroQrImageUrl ||
+    settings.weroContact
+  )
+    methods.push('wero')
   if (settings.paypalMeUrl && parsePaypalMe(settings.paypalMeUrl)) methods.push('paypal')
+  if (settings.revolutMeUrl && parseRevolutMe(settings.revolutMeUrl)) methods.push('revolut')
   return methods
 }

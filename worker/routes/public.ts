@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
-import { reservationInputSchema } from '../../shared/schemas'
+import { changePaymentMethodSchema, reservationInputSchema } from '../../shared/schemas'
 import { ApiError } from '../lib/errors'
 import { parseBody } from '../lib/http'
 import type { AppEnv } from '../middleware/security'
 import { getEventByInviteToken, getPublicEventBySlug, listPublicEvents } from '../services/events'
 import { hitRateLimit, rateLimitKey } from '../services/rate-limit'
+import { getImage } from '../services/images'
 import { sendTicketsEmail } from '../services/mailer'
-import { createReservation, declarePayment, getReservationView } from '../services/reservations'
+import { changePaymentMethod, createReservation, declarePayment, getReservationView } from '../services/reservations'
 import { getPublicTicket, verifyTicketToken } from '../services/tickets'
 import { qrPng } from '../lib/qr'
 import { notFound } from '../lib/errors'
@@ -53,6 +54,16 @@ publicRoutes.post('/reservations/:accessToken/declare-payment', async (c) => {
   return c.json(await declarePayment(c.env, c.req.param('accessToken'), now))
 })
 
+publicRoutes.post('/reservations/:accessToken/payment-method', async (c) => {
+  const input = await parseBody(c, changePaymentMethodSchema)
+  const now = new Date()
+  const key = await rateLimitKey(c.env, c.req.raw, 'declare')
+  if ((await hitRateLimit(c.env.DB, key, DECLARE_LIMIT.windowMs, now)) > DECLARE_LIMIT.max) {
+    throw new ApiError(429, 'rate_limited', 'Trop de tentatives. Réessayez plus tard.')
+  }
+  return c.json(await changePaymentMethod(c.env, c.req.param('accessToken'), input.paymentMethod, now))
+})
+
 async function sendTicketsEmailForCreated(env: Env, reference: string, origin: string, now: Date) {
   const row = await env.DB.prepare('SELECT id FROM reservations WHERE reference = ?1')
     .bind(reference)
@@ -74,4 +85,12 @@ publicRoutes.get('/tickets/:token/qr.png', async (c) => {
   if (!(await verifyTicketToken(c.env, token))) throw notFound('ticket_not_found', 'Billet introuvable.')
   const png = qrPng(ticketQrPayload(new URL(c.req.url).origin, token))
   return c.body(png, 200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' })
+})
+
+publicRoutes.get('/images/:id', async (c) => {
+  const { contentType, bytes } = await getImage(c.env, c.req.param('id'))
+  return c.body(bytes, 200, {
+    'Content-Type': contentType,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  })
 })

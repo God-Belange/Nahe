@@ -1,5 +1,6 @@
 import { RETENTION_MONTHS } from '../../shared/constants'
 import { getDb } from '../lib/db'
+import { purgeOrphanImages } from './images'
 import { expireDueReservations } from './reservations'
 import { purgeRateLimits } from './rate-limit'
 
@@ -12,6 +13,7 @@ export async function runMaintenance(env: Env, now: Date): Promise<MaintenanceRe
   const db = getDb(env.DB)
   await expireDueReservations(db, now)
   await purgeRateLimits(env.DB, now)
+  await purgeOrphanImages(env, now)
   await env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?1').bind(now.toISOString()).run()
 
   const cutoff = new Date(now)
@@ -22,7 +24,7 @@ export async function runMaintenance(env: Env, now: Date): Promise<MaintenanceRe
   const result = await env.DB.prepare(
     `UPDATE reservations
      SET first_name = 'Anonyme', last_name = '', email = 'anonyme-' || id || '@anonymise.invalid',
-         phone = NULL, access_token_hash = 'anonymized-' || id, idempotency_key = NULL, anonymized_at = ?2
+         phone = NULL, guests = NULL, access_token_hash = 'anonymized-' || id, idempotency_key = NULL, anonymized_at = ?2
      WHERE anonymized_at IS NULL
        AND event_id IN (SELECT id FROM events WHERE COALESCE(ends_at, starts_at) < ?1)`,
   )

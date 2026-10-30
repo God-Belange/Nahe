@@ -9,6 +9,7 @@ import {
   ticketLookupQuerySchema,
   updateEventSchema,
 } from '../../shared/schemas'
+import { IMAGE_MAX_BYTES } from '../../shared/constants'
 import type { SessionInfo } from '../../shared/types'
 import { getDb } from '../lib/db'
 import { ApiError } from '../lib/errors'
@@ -42,6 +43,7 @@ import {
   listReservations,
   regenerateAccessLink,
 } from '../services/reservations'
+import { saveImage } from '../services/images'
 import { sendTicketsEmail } from '../services/mailer'
 import { getPaymentSettings, savePaymentSettings } from '../services/settings'
 import {
@@ -123,6 +125,14 @@ for (const action of ['publish', 'unpublish', 'close', 'cancel'] as const satisf
     c.json(await transitionEvent(c.env, c.req.param('id'), action, new Date())),
   )
 }
+
+adminRoutes.post('/images', async (c) => {
+  const declared = Number(c.req.header('Content-Length') ?? 0)
+  if (declared > IMAGE_MAX_BYTES) {
+    throw new ApiError(422, 'image_too_large', 'Image trop lourde (1 Mo maximum).')
+  }
+  return c.json(await saveImage(c.env, await c.req.arrayBuffer(), new Date()), 201)
+})
 
 adminRoutes.get('/reservations', async (c) => {
   const filters = parseQuery(c, adminReservationsQuerySchema)
