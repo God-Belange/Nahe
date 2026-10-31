@@ -219,7 +219,28 @@ export interface PaymentSettings {
   updatedAt: string | null
 }
 
+export interface EmailTemplateView {
+  kind: 'tickets' | 'tracking'
+  subject: string
+  intro: string
+  footer: string
+  /** false tant que l'organisateur n'a pas modifié le modèle (texte par défaut). */
+  customized: boolean
+  updatedAt: string | null
+}
+
+export type SessionRole = 'admin' | 'scanner'
+
 export interface SessionInfo {
   authenticated: boolean
   csrfToken?: string
+  role?: SessionRole
+}
+
+/** Événement vu par le personnel d'entrée : aucune donnée de vente ni d'administration. */
+export interface ScanEvent {
+  id: string
+  title: string
+  startsAt: string
+  status: EventStatus
 }

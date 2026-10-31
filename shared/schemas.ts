@@ -7,6 +7,12 @@ import {
   PAYMENT_METHODS,
   RESERVATION_STATUSES,
 } from './constants'
+import {
+  EMAIL_TEMPLATE_KINDS,
+  EMAIL_TEMPLATE_LIMITS,
+  unknownPlaceholders,
+  type EmailTemplateKind,
+} from './email-templates'
 import { normalizePhone } from './phone'
 import { parsePaypalMe } from './paypal'
 import { parseRevolutMe } from './revolut'
@@ -42,23 +48,18 @@ export const reservationInputSchema = z
     lastName: trimmed(1, 80),
     email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
     phone: z
-      .preprocess(
-        emptyToNull,
-        z
-          .string()
-          .max(30)
-          .transform((v, ctx) => {
-            const normalized = normalizePhone(v)
-            if (normalized === null) {
-              ctx.addIssue({ code: 'custom', message: 'Numéro de téléphone invalide' })
-              return z.NEVER
-            }
-            return normalized
-          })
-          .nullable()
-          .optional(),
-      )
-      .transform((v) => v ?? null),
+      .string()
+      .trim()
+      .min(1)
+      .max(30)
+      .transform((v, ctx) => {
+        const normalized = normalizePhone(v)
+        if (normalized === null) {
+          ctx.addIssue({ code: 'custom', message: 'Numéro de téléphone invalide' })
+          return z.NEVER
+        }
+        return normalized
+      }),
     quantity: z.number().int().min(1).max(100).default(1),
     /** Prénom et nom des places 2 à N (la place 1 est celle du titulaire de la réservation). */
     guests: z.array(guestSchema).max(99).default([]),
@@ -206,6 +207,32 @@ export const paymentSettingsSchema = z.object({
   pendingTtlHours: z.number().int().min(1).max(168).default(DEFAULT_PENDING_TTL_HOURS),
 })
 export type PaymentSettingsInput = z.infer<typeof paymentSettingsSchema>
+
+export const emailTemplateKindSchema = z.enum(EMAIL_TEMPLATE_KINDS)
+
+export function emailTemplateSchema(kind: EmailTemplateKind) {
+  return z
+    .object({
+      subject: trimmed(1, EMAIL_TEMPLATE_LIMITS.subject).refine((v) => !/[\r\n]/.test(v), {
+        message: "L'objet doit tenir sur une seule ligne",
+      }),
+      intro: trimmed(1, EMAIL_TEMPLATE_LIMITS.intro),
+      footer: z.string().trim().max(EMAIL_TEMPLATE_LIMITS.footer),
+    })
+    .superRefine((value, ctx) => {
+      for (const field of ['subject', 'intro', 'footer'] as const) {
+        const unknown = unknownPlaceholders(kind, { subject: '', intro: '', footer: '', [field]: value[field] })
+        if (unknown.length > 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [field],
+            message: `Variable inconnue : ${unknown.map((n) => `{{${n}}}`).join(', ')}`,
+          })
+        }
+      }
+    })
+}
+export type EmailTemplateInput = z.infer<ReturnType<typeof emailTemplateSchema>>
 
 export const checkInSchema = z.object({
   token: z.string().trim().min(1).max(200),
