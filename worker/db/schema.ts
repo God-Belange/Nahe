@@ -125,10 +125,19 @@ export const paymentSettings = sqliteTable('payment_settings', {
   updatedAt: text('updated_at').notNull(),
 })
 
+export const emailTemplates = sqliteTable('email_templates', {
+  kind: text('kind', { enum: ['tickets', 'tracking'] }).primaryKey(),
+  subject: text('subject').notNull(),
+  intro: text('intro').notNull(),
+  footer: text('footer').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
 export const adminSessions = sqliteTable('admin_sessions', {
   id: text('id').primaryKey(),
   sessionTokenHash: text('session_token_hash').notNull().unique(),
   csrfTokenHash: text('csrf_token_hash').notNull(),
+  role: text('role', { enum: ['admin', 'scanner'] }).notNull().default('admin'),
   expiresAt: text('expires_at').notNull(),
   createdAt: text('created_at').notNull(),
 })
