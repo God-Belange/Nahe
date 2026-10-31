@@ -1,8 +1,9 @@
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import { fullName, parseGuests, ticketHolder } from '../../shared/guests'
 import type {
   EventTickets,
   PublicTicket,
+  ScanEvent,
   ScanOutcome,
   ScanResult,
   ScanTicketInfo,
@@ -223,4 +224,13 @@ export async function listEventTickets(env: Env, eventId: string): Promise<Event
     checkedIn: items.filter((t) => t.state === 'used').length,
     items,
   }
+}
+
+/** Liste minimale des événements contrôlables (hors brouillons), pour le rôle « scanner ». */
+export async function listScanEvents(env: Env): Promise<ScanEvent[]> {
+  return getDb(env.DB)
+    .select({ id: events.id, title: events.title, startsAt: events.startsAt, status: events.status })
+    .from(events)
+    .where(ne(events.status, 'draft'))
+    .orderBy(desc(events.startsAt))
 }

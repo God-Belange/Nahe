@@ -6,7 +6,7 @@ import type { AppEnv } from '../middleware/security'
 import { getEventByInviteToken, getPublicEventBySlug, listPublicEvents } from '../services/events'
 import { hitRateLimit, rateLimitKey } from '../services/rate-limit'
 import { getImage } from '../services/images'
-import { sendTicketsEmail } from '../services/mailer'
+import { sendTicketsEmail, sendTrackingEmail } from '../services/mailer'
 import { changePaymentMethod, createReservation, declarePayment, getReservationView } from '../services/reservations'
 import { getPublicTicket, verifyTicketToken } from '../services/tickets'
 import { qrPng } from '../lib/qr'
@@ -37,6 +37,8 @@ publicRoutes.post('/events/:id/reservations', async (c) => {
   const created = await createReservation(c.env, c.req.param('id'), input, now)
   if (created.reservation.status === 'confirmed') {
     await sendTicketsEmailForCreated(c.env, created.reservation.reference, new URL(c.req.url).origin, now)
+  } else {
+    await sendTrackingEmail(c.env, created.reservation.reference, created.accessToken, new URL(c.req.url).origin, now)
   }
   return c.json(created, 201)
 })

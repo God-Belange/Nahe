@@ -5,6 +5,8 @@ declare namespace Cloudflare {
   interface Env {
     DB: D1Database
     ADMIN_PASSWORD_HASH: string
+    /** Facultatif : code d'accès du personnel d'entrée (scan des billets uniquement). */
+    SCANNER_PASSWORD_HASH?: string
     SESSION_SECRET: string
     /** Facultatifs : sans eux, aucun e-mail de billets n'est envoyé. */
     BREVO_API_KEY?: string

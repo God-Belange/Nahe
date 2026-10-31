@@ -3,7 +3,7 @@ import { ZodError } from 'zod'
 import { ApiError } from './lib/errors'
 import { zodFields } from './lib/http'
 import { originCheck, securityHeaders, type AppEnv } from './middleware/security'
-import { adminRoutes, sessionRoutes } from './routes/admin'
+import { adminRoutes, scanRoutes, sessionRoutes } from './routes/admin'
 import { publicRoutes } from './routes/public'
 
 export const app = new Hono<AppEnv>().basePath('/api')
@@ -12,6 +12,7 @@ app.use('*', securityHeaders)
 app.use('*', originCheck)
 
 app.route('/admin/session', sessionRoutes)
+app.route('/admin', scanRoutes)
 app.route('/admin', adminRoutes)
 app.route('/', publicRoutes)
 

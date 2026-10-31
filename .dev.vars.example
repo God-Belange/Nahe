@@ -1,6 +1,9 @@
 # Copier vers .dev.vars (ignoré par git) pour le développement local.
 # Générer un hash : npm run admin:hash -- "votre mot de passe"
 ADMIN_PASSWORD_HASH=
+# Facultatif — code d'accès du personnel d'entrée (scan des billets uniquement, aucun accès au reste de l'admin).
+# Même commande de hash ; doit être différent du mot de passe organisateur.
+SCANNER_PASSWORD_HASH=
 SESSION_SECRET=remplacer-par-une-longue-valeur-aleatoire
 # Facultatif — envoi des billets par e-mail via Brevo (voir README). Sans ces valeurs : aucun e-mail envoyé.
 BREVO_API_KEY=

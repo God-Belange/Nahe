@@ -4,6 +4,8 @@ import {
   adminReservationsQuerySchema,
   checkInSchema,
   createEventSchema,
+  emailTemplateKindSchema,
+  emailTemplateSchema,
   loginSchema,
   paymentSettingsSchema,
   ticketLookupQuerySchema,
@@ -14,18 +16,19 @@ import type { SessionInfo } from '../../shared/types'
 import { getDb } from '../lib/db'
 import { ApiError } from '../lib/errors'
 import { parseBody, parseQuery } from '../lib/http'
-import { requireAdmin, SESSION_COOKIE } from '../middleware/admin'
+import { requireAdmin, requireStaff, SESSION_COOKIE } from '../middleware/admin'
 import type { AppEnv } from '../middleware/security'
 import {
   authenticateSession,
-  checkAdminPassword,
   createSession,
+  resolveLoginRole,
   destroySession,
   LOGIN_MAX_FAILURES,
   LOGIN_WINDOW_MS,
   SESSION_TTL_SECONDS,
 } from '../services/auth'
 import { getDashboardStats } from '../services/dashboard'
+import { listEmailTemplates, resetEmailTemplate, saveEmailTemplate } from '../services/email-templates'
 import {
   createEvent,
   getAdminEvent,
@@ -50,6 +53,7 @@ import {
   checkInByToken,
   checkInTicket,
   listEventTickets,
+  listScanEvents,
   lookupTicket,
   undoCheckIn,
 } from '../services/tickets'
@@ -60,7 +64,7 @@ export const sessionRoutes = new Hono<AppEnv>()
 sessionRoutes.get('/', async (c) => {
   const session = await authenticateSession(c.env, getCookie(c, SESSION_COOKIE, 'host'), new Date())
   const body: SessionInfo = session
-    ? { authenticated: true, csrfToken: session.csrfToken }
+    ? { authenticated: true, csrfToken: session.csrfToken, role: session.role }
     : { authenticated: false }
   return c.json(body)
 })
@@ -73,12 +77,13 @@ sessionRoutes.post('/', async (c) => {
   if ((await peekRateLimit(c.env.DB, key, LOGIN_WINDOW_MS, now)) >= LOGIN_MAX_FAILURES) {
     throw new ApiError(429, 'rate_limited', 'Trop de tentatives. Réessayez dans 15 minutes.')
   }
-  if (!(await checkAdminPassword(c.env, password))) {
+  const role = await resolveLoginRole(c.env, password)
+  if (!role) {
     await hitRateLimit(c.env.DB, key, LOGIN_WINDOW_MS, now)
-    throw new ApiError(401, 'invalid_credentials', 'Mot de passe incorrect.')
+    throw new ApiError(401, 'invalid_credentials', 'Code d\'accès incorrect.')
   }
 
-  const session = await createSession(c.env, now)
+  const session = await createSession(c.env, now, role)
   setCookie(c, SESSION_COOKIE, session.sessionToken, {
     prefix: 'host',
     httpOnly: true,
@@ -87,7 +92,7 @@ sessionRoutes.post('/', async (c) => {
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
   })
-  const body: SessionInfo = { authenticated: true, csrfToken: session.csrfToken }
+  const body: SessionInfo = { authenticated: true, csrfToken: session.csrfToken, role }
   return c.json(body)
 })
 
@@ -182,24 +187,50 @@ adminRoutes.put('/payment-settings', async (c) => {
   return c.json(await savePaymentSettings(getDb(c.env.DB), input, new Date()))
 })
 
-adminRoutes.get('/tickets/lookup', async (c) => {
+adminRoutes.get('/email-templates', async (c) => c.json(await listEmailTemplates(getDb(c.env.DB))))
+
+function emailTemplateKind(raw: string) {
+  const parsed = emailTemplateKindSchema.safeParse(raw)
+  if (!parsed.success) throw new ApiError(404, 'not_found', 'Modèle d\'e-mail introuvable.')
+  return parsed.data
+}
+
+adminRoutes.put('/email-templates/:kind', async (c) => {
+  const kind = emailTemplateKind(c.req.param('kind'))
+  const input = await parseBody(c, emailTemplateSchema(kind))
+  return c.json(await saveEmailTemplate(getDb(c.env.DB), kind, input, new Date()))
+})
+
+adminRoutes.delete('/email-templates/:kind', async (c) =>
+  c.json(await resetEmailTemplate(getDb(c.env.DB), emailTemplateKind(c.req.param('kind')))),
+)
+
+/** Contrôle d'entrée : accessible à l'organisateur et au personnel d'entrée (rôle « scanner »). Monté avant adminRoutes. */
+export const scanRoutes = new Hono<AppEnv>()
+scanRoutes.use('/tickets/*', requireStaff)
+scanRoutes.use('/scan/*', requireStaff)
+scanRoutes.use('/events/:id/tickets', requireStaff)
+
+scanRoutes.get('/scan/events', async (c) => c.json(await listScanEvents(c.env)))
+
+scanRoutes.get('/tickets/lookup', async (c) => {
   const { t, eventId } = parseQuery(c, ticketLookupQuerySchema)
   return c.json(await lookupTicket(c.env, t, eventId))
 })
 
-adminRoutes.post('/tickets/check-in', async (c) => {
+scanRoutes.post('/tickets/check-in', async (c) => {
   const { token, eventId } = await parseBody(c, checkInSchema)
   return c.json(await checkInByToken(c.env, token, new Date(), eventId))
 })
 
-adminRoutes.post('/tickets/:id/check-in', async (c) =>
+scanRoutes.post('/tickets/:id/check-in', async (c) =>
   c.json(await checkInTicket(c.env, c.req.param('id'), new Date())),
 )
 
-adminRoutes.post('/tickets/:id/undo-check-in', async (c) =>
+scanRoutes.post('/tickets/:id/undo-check-in', async (c) =>
   c.json(await undoCheckIn(c.env, c.req.param('id'))),
 )
 
-adminRoutes.get('/events/:id/tickets', async (c) =>
+scanRoutes.get('/events/:id/tickets', async (c) =>
   c.json(await listEventTickets(c.env, c.req.param('id'))),
 )
