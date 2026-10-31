@@ -23,7 +23,7 @@ Petit groupe privé, un seul organisateur (admin unique). L'architecture doit re
 
 ### Hors périmètre (explicitement exclu)
 
-Comptes invités, chat, notifications SMS, remboursement automatisé, marketplace multi-organisateurs, intégration API de paiement, e-mails autres que l'envoi des billets (pas de rappels, newsletters ni confirmations de réservation).
+Comptes invités, chat, notifications SMS, remboursement automatisé, marketplace multi-organisateurs, intégration API de paiement, e-mails autres que le lien de suivi à la réservation et l'envoi des billets (pas de rappels ni de newsletters).
 
 ---
 
@@ -104,6 +104,7 @@ Moderne, chaleureuse, festive — **pas** le style d'une billetterie professionn
 | `/admin/evenements`, `/admin/evenements/nouveau`, `/admin/evenements/:id` | Liste, création, édition | Admin |
 | `/admin/reservations` | Gestion des participants | Admin |
 | `/admin/parametres` | Paramètres de paiement | Admin |
+| `/admin/emails` | Modèles des e-mails (billets, suivi) | Admin |
 
 ---
 
@@ -131,7 +132,7 @@ Aucun compte requis.
 |---|---|
 | Prénom, nom | Obligatoires, 1–80 caractères |
 | E-mail | Obligatoire, format valide |
-| Téléphone | Facultatif, format normalisé |
+| Téléphone | Obligatoire, format normalisé |
 | Nombre de places | Entier ≥ 1, défaut 1, max configurable par réservation (défaut 10) et ≤ places restantes |
 | Participants | Dès 2 places : prénom et nom obligatoires pour chaque place supplémentaire (la place 1 est au nom du titulaire). Stockés en JSON (`reservations.guests`), repris sur chaque billet, le scan et l'e-mail |
 | Moyen de paiement | `wero` ou `paypal` (non demandé si l'événement est gratuit) |
@@ -144,7 +145,7 @@ Comportement :
 4. `expires_at` = création + délai configurable (défaut **24 h**).
 5. **Anti-doublon** : une clé d'idempotence envoyée par le formulaire évite la double soumission ; une seconde réservation `pending` avec le même e-mail pour le même événement est refusée avec un message clair renvoyant au suivi existant.
 6. **Événement gratuit** (`price_cents = 0`) : la réservation passe directement en `confirmed`, sans étape de paiement.
-7. Le jeton d'accès n'existe que dans l'URL de suivi ; l'invité est invité à **conserver ce lien** (favori, copie, partage à soi-même sur WhatsApp). Le seul e-mail envoyé est celui des **billets** (§4.6) ; il ne contient jamais le lien de suivi. Un lien perdu se retrouve via l'organisateur, qui peut régénérer un lien de suivi depuis l'admin (l'ancien jeton est invalidé).
+7. Le jeton d'accès n'existe que dans l'URL de suivi ; l'invité est invité à **conserver ce lien** (favori, copie, partage à soi-même sur WhatsApp). Le lien de suivi est aussi envoyé **par e-mail à la création** d'une réservation en attente (e-mail distinct, « Suivre ma réservation » ; le jeton n'étant stocké que sous forme de hash, cet envoi n'est possible qu'à ce moment). L'envoi n'a jamais d'effet bloquant (fournisseur absent, en échec ou quota atteint : la réservation reste valide) et partage les plafonds anti-abus des billets (compteur par adresse distinct). L'e-mail des **billets** (§4.6) ne contient, lui, jamais le lien de suivi. Un lien perdu se retrouve via l'organisateur, qui peut régénérer un lien de suivi depuis l'admin (l'ancien jeton est invalidé).
 
 ### 4.4 Paiements (manuels)
 
@@ -195,6 +196,8 @@ Transitions autorisées : `pending → confirmed | cancelled | expired`, `confir
 - l'organisateur peut annuler une validation faite par erreur ;
 - compteur « entrés / attendus » par événement.
 
+**Personnel d'entrée.** L'organisateur peut déléguer le contrôle sans partager son mot de passe : un second code d'accès (`SCANNER_PASSWORD_HASH`, facultatif) ouvre une session au rôle `scanner`, limitée à l'écran `/admin/scan` (navigation réduite, redirection depuis toute autre page admin). Elle ne donne accès ni aux ventes, ni aux e-mails/téléphones, ni aux paiements, ni aux réglages ; elle voit uniquement les noms des porteurs et références des billets nécessaires à l'entrée.
+
 **Invalidation.** L'annulation d'une réservation annule tous ses billets ; l'annulation d'un événement bloque toute entrée ; un billet annulé ou d'un autre événement est refusé au scan. Un billet déjà utilisé reste visible comme tel. La régénération du lien de suivi n'affecte pas les billets.
 
 **Rétention.** Les billets suivent la durée de conservation des réservations (6 mois après l'événement) ; l'anonymisation les rend inutilisables.
@@ -231,6 +234,10 @@ Les deux montants sont toujours présentés séparément et étiquetés pour ne 
 ### 5.4 Paramètres de paiement
 
 Instructions Wero, QR code Wero (fichier de `public/images/` ou image envoyée depuis l'admin), URL PayPal.Me (validée : domaine `paypal.me` uniquement), URL Revolut.me (domaine `revolut.me` uniquement), délai d'expiration par défaut.
+
+### 5.5 Modèles d'e-mails
+
+L'admin personnalise, pour chacun des deux e-mails (billets, lien de suivi), l'**objet**, l'**introduction** et la **conclusion**. La mise en page, le bloc événement, les QR codes et le bouton de suivi restent fixes (pas de HTML libre). Une ligne = un paragraphe ; `**gras**` supporté ; variables `{{prenom}}`, `{{evenement}}`, `{{date}}`, `{{lieu}}`, `{{adresse}}`, `{{reference}}` (+ `{{billets}}`, `{{billets_avec_nombre}}`, `{{nb_billets}}` pour les billets ; `{{lien}}` pour le suivi). Les valeurs sont toujours échappées ; une variable inconnue ou propre à l'autre modèle est refusée à l'enregistrement. Sans personnalisation (ou après « Rétablir le texte par défaut »), le texte d'origine est utilisé. Un aperçu en texte brut avec des valeurs d'exemple est affiché dans l'admin. Les modifications ne concernent que les envois suivants.
 
 ---
 
@@ -301,6 +308,10 @@ Index : `reservation_id`, `(event_id, status)`. Le jeton affiché dans le QR n'e
 
 `reservations` reçoit en plus : `tickets_emailed_at` (nullable), `anonymized_at`, `expired_at`.
 
+### `email_templates`
+
+`kind` (PK : `tickets` | `tracking`), `subject`, `intro`, `footer`, `updated_at`. Absence de ligne = texte par défaut (`shared/email-templates.ts`).
+
 ### `payment_settings` (ligne unique)
 
 `id`, `wero_instructions`, `wero_qr_image_url`, `wero_contact`, `paypal_me_url`, `revolut_me_url`, `pending_ttl_hours`, `updated_at`.
@@ -351,10 +362,15 @@ Préfixe `/api`. Réponses JSON, erreurs au format `{ error: { code, message, fi
 | POST | `/admin/reservations/:id/regenerate-link` | Nouveau lien de suivi (invalide l'ancien) |
 | GET | `/admin/reservations.csv` | Export |
 | GET/PUT | `/admin/payment-settings` | Paramètres |
+| GET | `/admin/email-templates` | Modèles d'e-mails (défaut ou personnalisé) |
+| PUT/DELETE | `/admin/email-templates/:kind` | Enregistrer / rétablir le texte par défaut |
+| GET | `/admin/scan/events` | Événements contrôlables (hors brouillons) : `id`, `title`, `startsAt`, `status` uniquement — **rôle scanner autorisé** |
 | GET | `/admin/tickets/lookup?t=` | Consulter un billet scanné (sans effet de bord) |
 | POST | `/admin/tickets/check-in` | Valider l'entrée d'un billet (par jeton) — atomique |
 | POST | `/admin/tickets/:id/check-in`, `/:id/undo-check-in` | Validation manuelle / annulation d'une validation |
 | GET | `/admin/events/:id/tickets` | Billets de l'événement + compteur entrés/attendus |
+
+**Rôles.** `POST /admin/session` accepte le mot de passe organisateur (`ADMIN_PASSWORD_HASH`) ou, s'il est configuré, le code d'accès du personnel d'entrée (`SCANNER_PASSWORD_HASH`) ; le code saisi fixe le rôle de la session (`admin` ou `scanner`, colonne `admin_sessions.role`). Le rôle `scanner` n'est autorisé que sur `/admin/scan/events`, `/admin/tickets/*` et `/admin/events/:id/tickets` ; toute autre route `/admin/*` répond 403 `forbidden`. Même limitation de débit à la connexion, mêmes protections CSRF/Origin.
 | POST | `/admin/reservations/:id/resend-tickets` | Renvoyer l'e-mail des billets |
 
 L'API publique ne renvoie jamais de données de participants (noms, e-mails) ; elle n'expose que des compteurs. Seules exceptions : la page de suivi (son titulaire), et la page billet qui n'affiche que le prénom du titulaire et `i / N`. Le suivi d'une réservation confirmée inclut les jetons de ses billets.
@@ -496,7 +512,7 @@ Priorité absolue : une première version **simple, sécurisée, utilisable et s
 
 1. Expiration des réservations `pending` : **24 h**.
 2. Conservation des données : **6 mois** après l'événement.
-3. Pas d'e-mail de confirmation : l'invité **conserve son lien de suivi**.
+3. Lien de suivi envoyé par e-mail à la réservation (demande du propriétaire, 2026-10-30) ; l'invité est aussi invité à le **conserver**.
 4. Images : pas de R2. Téléversement depuis l'admin vers D1 (table `images`, base64, 1 Mo max, JPEG/PNG/WebP vérifiés par signature, SVG refusé) ; la saisie d'un chemin `public/images/…` reste possible. Les images non référencées sont purgées par la maintenance quotidienne après 24 h.
 5. Bouton « J'ai payé » (signalement sans effet sur le statut) : **inclus**.
 6. Hono ajouté à la stack imposée : **accepté**.
