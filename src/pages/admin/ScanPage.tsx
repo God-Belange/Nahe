@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import type {
-  AdminEvent,
   EventTicketRow,
   EventTickets,
+  ScanEvent,
   ScanOutcome,
   ScanResult,
 } from '../../../shared/types'
@@ -70,7 +70,7 @@ export default function ScanPage() {
   const paramEventId = params.get('eventId')
   const paramToken = params.get('t')
 
-  const events = useAsync(() => api.get<AdminEvent[]>('/admin/events'), [])
+  const events = useAsync(() => api.get<ScanEvent[]>('/admin/scan/events'), [])
   const [chosenEventId, setChosenEventId] = useState<string | null>(null)
 
   const defaultEventId = useMemo(() => {
@@ -369,7 +369,7 @@ export default function ScanPage() {
         {events.loading && !events.data && <Skeleton className="h-24" />}
 
         {events.data && events.data.length === 0 && (
-          <Alert tone="info">Aucun événement pour le moment : créez-en un pour émettre des billets.</Alert>
+          <Alert tone="info">Aucun événement à contrôler pour le moment.</Alert>
         )}
 
         {events.data && events.data.length > 0 && (

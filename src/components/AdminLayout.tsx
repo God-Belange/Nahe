@@ -10,11 +10,13 @@ const LINKS = [
   { to: '/admin/reservations', label: 'Réservations', end: false },
   { to: '/admin/scan', label: 'Scanner', end: false },
   { to: '/admin/parametres', label: 'Paiements', end: false },
+  { to: '/admin/emails', label: 'E-mails', end: false },
 ]
 
 export function AdminLayout() {
   usePrivatePage()
-  const { logout } = useAdminSession()
+  const { logout, role } = useAdminSession()
+  const links = role === 'scanner' ? LINKS.filter((l) => l.to === '/admin/scan') : LINKS
   const navigate = useNavigate()
 
   return (
@@ -26,7 +28,7 @@ export function AdminLayout() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             <Logo />
-            <span className="hidden rounded-full bg-ink px-2.5 py-1 text-xs font-bold text-white sm:inline">Organisateur</span>
+            <span className="hidden rounded-full bg-ink px-2.5 py-1 text-xs font-bold text-white sm:inline">{role === 'scanner' ? 'Contrôle d’entrée' : 'Organisateur'}</span>
           </div>
           <Button
             variant="ghost"
@@ -41,7 +43,7 @@ export function AdminLayout() {
         </div>
         <nav aria-label="Administration" className="mx-auto max-w-6xl overflow-x-auto px-4 pb-2 sm:px-6">
           <ul className="flex gap-1">
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <li key={l.to}>
                 <NavLink
                   to={l.to}

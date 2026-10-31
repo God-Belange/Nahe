@@ -225,7 +225,7 @@ function KeepLink({ view, url }: { view: ReservationView; url: string }) {
     <Card className="space-y-3 border-2 border-dashed border-sun bg-sun/15">
       <h2 className="text-lg font-bold"><span aria-hidden="true">🔖 </span>Conservez ce lien</h2>
       <p className="text-sm text-ink-soft">
-        Ce lien est le seul moyen de retrouver votre réservation (il n'est jamais envoyé par e-mail). Gardez-le en favori ou envoyez-le-vous.
+        Ce lien est le moyen de retrouver votre réservation : il vous a aussi été envoyé par e-mail à la réservation (pensez à vérifier vos courriers indésirables). Gardez-le en favori ou envoyez-le-vous.
         Il est secret, ne le partagez pas.
       </p>
       <p className="rounded-xl bg-paper px-3 py-2 font-mono text-xs break-all select-all">{url}</p>

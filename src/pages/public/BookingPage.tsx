@@ -159,7 +159,7 @@ function BookingForm({ event, mode, param }: { event: PublicEvent; mode: EventMo
               <TextField label="Nom" required autoComplete="family-name" maxLength={80} value={form.lastName} error={fieldErrors.lastName || undefined} onChange={(e) => set('lastName', e.target.value)} />
             </div>
             <TextField label="E-mail" type="email" required autoComplete="email" inputMode="email" value={form.email} error={fieldErrors.email || undefined} hint="Vos billets (QR codes) vous seront envoyés à cette adresse après confirmation du paiement. Aucun autre e-mail." onChange={(e) => set('email', e.target.value)} />
-            <TextField label="Téléphone" type="tel" optional autoComplete="tel" inputMode="tel" value={form.phone} error={fieldErrors.phone || undefined} onChange={(e) => set('phone', e.target.value)} />
+            <TextField label="Téléphone" type="tel" required autoComplete="tel" inputMode="tel" value={form.phone} error={fieldErrors.phone || undefined} onChange={(e) => set('phone', e.target.value)} />
             <Stepper value={form.quantity} max={maxQuantity} onChange={setQuantity} error={fieldErrors.quantity || undefined} />
           </Card>
 
@@ -245,7 +245,7 @@ function BookingForm({ event, mode, param }: { event: PublicEvent; mode: EventMo
 function Summary({ event, quantity, total }: { event: PublicEvent; quantity: number; total: number }) {
   return (
     <Card className="overflow-hidden p-0">
-      <EventCover src={event.coverImageUrl} className="h-32 w-full" />
+      <EventCover src={event.coverImageUrl} natural className="w-full bg-ink/5" />
       <div className="space-y-3 p-5">
         <h2 className="text-lg font-bold">{event.title}</h2>
         <p className="text-sm text-ink-soft">

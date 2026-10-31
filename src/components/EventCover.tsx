@@ -2,13 +2,26 @@ import { useState } from 'react'
 import { cx } from './ui/cx'
 
 /** Image de couverture, avec dégradé aux couleurs de l'accent si absente ou en erreur. */
-export function EventCover({ src, alt = '', className, eager }: { src: string | null; alt?: string; className?: string; eager?: boolean }) {
+export function EventCover({
+  src,
+  alt = '',
+  className,
+  eager,
+  natural,
+}: {
+  src: string | null
+  alt?: string
+  className?: string
+  eager?: boolean
+  /** Affiche l'image entière, sans recadrage (les visuels contiennent souvent du texte). */
+  natural?: boolean
+}) {
   const [failed, setFailed] = useState(false)
   if (!src || failed) {
     return (
       <div
         aria-hidden="true"
-        className={cx('grid place-items-center bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] text-6xl', className)}
+        className={cx('grid place-items-center bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] text-6xl', natural && 'h-56 sm:h-80', className)}
       >
         <span className="drop-shadow">🎉</span>
       </div>
@@ -21,7 +34,7 @@ export function EventCover({ src, alt = '', className, eager }: { src: string | 
       loading={eager ? 'eager' : 'lazy'}
       decoding="async"
       onError={() => setFailed(true)}
-      className={cx('object-cover', className)}
+      className={cx(natural ? 'h-auto max-h-[75vh] object-contain' : 'object-cover', className)}
     />
   )
 }

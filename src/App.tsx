@@ -18,6 +18,7 @@ const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'))
 const EventsPage = lazy(() => import('./pages/admin/EventsPage'))
 const EventFormPage = lazy(() => import('./pages/admin/EventFormPage'))
 const ReservationsPage = lazy(() => import('./pages/admin/ReservationsPage'))
+const EmailTemplatesPage = lazy(() => import('./pages/admin/EmailTemplatesPage'))
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'))
 const ScanPage = lazy(() => import('./pages/admin/ScanPage'))
 
@@ -53,6 +54,7 @@ export function App() {
             <Route path="reservations" element={<ReservationsPage />} />
             <Route path="scan" element={<ScanPage />} />
             <Route path="parametres" element={<SettingsPage />} />
+            <Route path="emails" element={<EmailTemplatesPage />} />
           </Route>
         </Route>
       </Routes>

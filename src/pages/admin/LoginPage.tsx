@@ -50,11 +50,13 @@ export default function LoginPage() {
       <Logo size="xl" asLink={false} className="mb-8" />
       <Card className="w-full animate-rise">
         <h1 className="text-2xl font-extrabold">Espace organisateur</h1>
-        <p className="mt-1 text-sm text-ink-soft">Connectez-vous pour gérer vos événements.</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Connectez-vous pour gérer vos événements, ou saisissez le code d’accès du contrôle d’entrée.
+        </p>
         <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-4" noValidate>
           {error && <Alert tone="bad">{error}</Alert>}
           <TextField
-            label="Mot de passe"
+            label="Mot de passe ou code d’accès"
             type="password"
             autoComplete="current-password"
             required

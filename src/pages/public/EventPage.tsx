@@ -92,14 +92,11 @@ export default function EventPage({ mode }: { mode: EventMode }) {
       {mode === 'invite' && <PrivateMeta />}
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="relative animate-rise overflow-hidden rounded-[var(--radius-card)] shadow-card">
-          <EventCover src={event.coverImageUrl} alt={`Illustration : ${event.title}`} eager className="h-56 w-full sm:h-80 lg:h-96" />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 to-transparent p-5 pt-16 sm:p-8 sm:pt-24">
-            <div className="mb-2 flex flex-wrap gap-2">
-              {event.status === 'closed' && <Badge tone="warn">{fr.event.closed}</Badge>}
-              {event.status === 'cancelled' && <Badge tone="bad">Annulé</Badge>}
-              <Badge tone="sun">{formatPrice(event.priceCents)}</Badge>
-            </div>
-            <h1 className="text-3xl font-extrabold text-balance text-white drop-shadow sm:text-5xl">{event.title}</h1>
+          <EventCover src={event.coverImageUrl} alt={`Illustration : ${event.title}`} eager natural className="w-full bg-ink/5" />
+          <div className="absolute bottom-3 left-3 flex flex-wrap gap-2 sm:bottom-4 sm:left-4">
+            {event.status === 'closed' && <Badge tone="warn" className="shadow-card">{fr.event.closed}</Badge>}
+            {event.status === 'cancelled' && <Badge tone="bad" className="shadow-card">Annulé</Badge>}
+            <Badge tone="sun" className="shadow-card">{formatPrice(event.priceCents)}</Badge>
           </div>
         </div>
 
@@ -108,12 +105,10 @@ export default function EventPage({ mode }: { mode: EventMode }) {
             {blocked && event.blockReason && (
               <Alert tone={event.blockReason === 'full' ? 'warn' : 'info'} title={BLOCK_REASON_MESSAGES[event.blockReason]} />
             )}
-            {event.description && (
-              <section aria-labelledby="a-propos">
-                <h2 id="a-propos" className="mb-3 text-2xl font-bold">À propos</h2>
-                <p className="leading-relaxed whitespace-pre-line text-ink-soft">{event.description}</p>
-              </section>
-            )}
+            <section aria-labelledby="titre">
+              <h1 id="titre" className="mb-3 text-3xl font-extrabold text-balance sm:text-4xl">{event.title}</h1>
+              {event.description && <p className="leading-relaxed whitespace-pre-line text-ink-soft">{event.description}</p>}
+            </section>
             {event.extraInfo && (
               <section aria-labelledby="infos">
                 <h2 id="infos" className="mb-3 text-2xl font-bold">Infos pratiques</h2>

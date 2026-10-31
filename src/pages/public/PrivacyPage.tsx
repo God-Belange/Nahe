@@ -38,8 +38,8 @@ export default function PrivacyPage() {
           Aucune donnée bancaire ne transite par ce site.
         </p>
         <p>
-          Une fois votre paiement confirmé, nous vous envoyons <strong>un seul e-mail</strong> contenant vos billets (un QR code par place).
-          Nous n'envoyons aucun autre e-mail : ni promotion, ni rappel, ni newsletter.
+          Nous vous envoyons <strong>deux e-mails au plus</strong> : l'un à la réservation, avec votre lien de suivi, l'autre une fois votre paiement confirmé,
+          avec vos billets (un QR code par place). Nous n'envoyons aucun autre e-mail : ni promotion, ni rappel, ni newsletter.
         </p>
       </Section>
 
@@ -83,8 +83,8 @@ export default function PrivacyPage() {
       <Section title="Hébergement et sous-traitants">
         <p>Le site est hébergé par Cloudflare (Workers et base de données D1), qui traite les données techniquement pour le compte de l'organisateur.</p>
         <p>
-          L'e-mail contenant vos billets est transmis par <strong>Brevo</strong> (hébergé dans l'Union européenne), qui agit comme sous-traitant
-          pour la seule transmission de cet e-mail (votre nom, votre adresse e-mail et le contenu des billets).
+          Ces e-mails sont transmis par <strong>Brevo</strong> (hébergé dans l'Union européenne), qui agit comme sous-traitant
+          pour la seule transmission de ces messages (votre nom, votre adresse e-mail, votre lien de suivi et le contenu des billets).
         </p>
       </Section>
 
