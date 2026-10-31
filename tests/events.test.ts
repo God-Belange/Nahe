@@ -177,7 +177,7 @@ describe('changements d\'état', () => {
 describe('règles d\'ouverture des réservations (appliquées par le serveur)', () => {
   const book = async (eventId: string) =>
     createReservation(env, eventId, reservationInputSchema.parse({
-      firstName: 'A', lastName: 'B', email: 'a@b.fr', quantity: 1, paymentMethod: 'wero',
+      firstName: 'A', lastName: 'B', email: 'a@b.fr', phone: '0612345678', quantity: 1, paymentMethod: 'wero',
     }), new Date())
 
   it.each([

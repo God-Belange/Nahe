@@ -6,6 +6,7 @@ import { savePaymentSettings } from '../worker/services/settings'
 import { getDb } from '../worker/lib/db'
 
 export const TEST_ADMIN_PASSWORD = 'mot-de-passe-de-test'
+export const TEST_SCANNER_PASSWORD = 'code-entree-de-test'
 const ORIGIN = 'https://nahe.test'
 
 export async function resetDatabase() {
@@ -14,6 +15,7 @@ export async function resetDatabase() {
     env.DB.prepare('DELETE FROM reservations'),
     env.DB.prepare('DELETE FROM events'),
     env.DB.prepare('DELETE FROM payment_settings'),
+    env.DB.prepare('DELETE FROM email_templates'),
     env.DB.prepare('DELETE FROM images'),
     env.DB.prepare('DELETE FROM admin_sessions'),
     env.DB.prepare('DELETE FROM rate_limits'),
@@ -65,10 +67,10 @@ export interface AdminSessionData {
   csrf: string
 }
 
-export async function login(ip = freshIp()): Promise<AdminSessionData> {
+export async function login(ip = freshIp(), password = TEST_ADMIN_PASSWORD): Promise<AdminSessionData> {
   const res = await api('/admin/session', {
     method: 'POST',
-    body: { password: TEST_ADMIN_PASSWORD },
+    body: { password },
     ip,
   })
   if (res.status !== 200) throw new Error(`login failed: ${res.status} ${res.text}`)
@@ -129,6 +131,7 @@ export function reservationBody(overrides: Record<string, unknown> = {}) {
     firstName: 'Camille',
     lastName: 'Durand',
     email: `invite${++emailCounter}@example.com`,
+    phone: '0612345678',
     quantity: 1,
     guests: Array.from({ length: Math.max(0, quantity - 1) }, (_, i) => ({ firstName: `Invité${i + 2}`, lastName: 'Durand' })),
     paymentMethod: 'wero',

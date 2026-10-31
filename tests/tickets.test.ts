@@ -7,7 +7,7 @@ import { runMaintenance } from '../worker/services/maintenance'
 import { buildTicketsEmail, MAIL_GLOBAL_DAILY_CAP, sendTicketsEmail } from '../worker/services/mailer'
 import { issueTickets, signTicket, verifyTicketToken } from '../worker/services/tickets'
 import { adminApi, api, configurePayments, daysFromNow, login, makeEvent, reserve, reserveAndConfirm } from './helpers'
-import { mailbox } from './mail'
+import { mailbox, ticketMails } from './mail'
 
 const countTickets = async () =>
   (await env.DB.prepare('SELECT COUNT(*) AS n FROM tickets').first<{ n: number }>())!.n
@@ -24,7 +24,7 @@ describe('émission des billets', () => {
     const view = await api(`/reservations/${data.accessToken}`)
     expect(view.json.status).toBe('pending')
     expect(view.json.tickets).toEqual([])
-    expect(mailbox.sent).toHaveLength(0)
+    expect(ticketMails()).toHaveLength(0)
   })
 
   it('une réservation de 4 places produit 4 billets distincts numérotés 1/4 à 4/4', async () => {
@@ -43,7 +43,7 @@ describe('émission des billets', () => {
     const { data } = await reserve(event.id, { quantity: 3, paymentMethod: null })
     expect(data.reservation.status).toBe('confirmed')
     expect(data.reservation.tickets).toHaveLength(3)
-    expect(mailbox.sent).toHaveLength(1)
+    expect(ticketMails()).toHaveLength(1)
   })
 
   it('l\'émission est idempotente et se rattrape toute seule', async () => {
@@ -345,6 +345,23 @@ describe('QR code', () => {
 })
 
 describe('e-mail des billets', () => {
+  it('envoie le lien de suivi par e-mail à la réservation, sans bloquer en cas d\'échec', async () => {
+    await configurePayments()
+    const event = await makeEvent({ capacity: 10 })
+    const created = await reserve(event.id, { firstName: 'Inès', email: 'ines@example.com' })
+    expect(created.status).toBe(201)
+    expect(mailbox.sent).toHaveLength(1)
+    const mail = mailbox.sent[0]!
+    expect(mail.to[0]!.email).toBe('ines@example.com')
+    expect(mail.subject).toContain('Votre réservation')
+    expect(mail.htmlContent).toContain(`/r/${created.data.accessToken}`)
+    expect(mail.textContent).toContain(`/r/${created.data.accessToken}`)
+
+    mailbox.status = 500
+    const failed = await reserve(event.id, { email: 'autre@example.com' })
+    expect(failed.status).toBe(201)
+  })
+
   it('envoie à la confirmation un seul e-mail contenant un QR par billet, sans lien de suivi', async () => {
     await configurePayments()
     const event = await makeEvent({ capacity: 10 })
@@ -352,8 +369,8 @@ describe('e-mail des billets', () => {
     expect(confirm.status).toBe(200)
     expect(confirm.json.ticketsEmail).toBe('sent')
     expect(confirm.json.ticketsEmailedAt).not.toBeNull()
-    expect(mailbox.sent).toHaveLength(1)
-    const mail = mailbox.sent[0]!
+    expect(ticketMails()).toHaveLength(1)
+    const mail = ticketMails()[0]!
     expect(mail.to[0]!.email).toBe('camille@example.com')
     expect(mail.sender.email).toBe('billets@nahe.test')
     expect(mail.subject).toContain('Vos billets')
@@ -384,7 +401,7 @@ describe('e-mail des billets', () => {
     const resend = await adminApi(session, `/reservations/${id}/resend-tickets`, { method: 'POST', body: {} })
     expect(resend.json.ticketsEmail).toBe('sent')
     expect(resend.json.ticketsEmailedAt).not.toBeNull()
-    expect(mailbox.sent).toHaveLength(1)
+    expect(ticketMails()).toHaveLength(1)
   })
 
   it('refuse de renvoyer les billets d\'une réservation non confirmée', async () => {
@@ -395,7 +412,7 @@ describe('e-mail des billets', () => {
     const list = await adminApi(session, `/reservations?q=${data.reservation.reference}`)
     const res = await adminApi(session, `/reservations/${list.json.items[0].id}/resend-tickets`, { method: 'POST', body: {} })
     expect(res.status).toBe(409)
-    expect(mailbox.sent).toHaveLength(0)
+    expect(ticketMails()).toHaveLength(0)
   })
 
   it('sans configuration du fournisseur, aucun e-mail et aucune erreur', async () => {
@@ -405,7 +422,7 @@ describe('e-mail des billets', () => {
     mailbox.sent.length = 0
     const result = await sendTicketsEmail({ ...env, BREVO_API_KEY: undefined }, id, 'https://nahe.test', new Date())
     expect(result).toBe('not_configured')
-    expect(mailbox.sent).toHaveLength(0)
+    expect(ticketMails()).toHaveLength(0)
   })
 
   it('plafonne les envois par adresse et par événement (3 / 24 h), sauf renvoi admin', async () => {
@@ -455,7 +472,7 @@ describe('e-mail des billets', () => {
     await configurePayments()
     const event = await makeEvent()
     await reserveAndConfirm(event.id)
-    expect(mailbox.sent[0]!.subject).toMatch(/^Votre billet pour/)
+    expect(ticketMails()[0]!.subject).toMatch(/^Votre billet pour/)
   })
 })
 

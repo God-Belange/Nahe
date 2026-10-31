@@ -49,7 +49,7 @@ describe('authentification admin', () => {
     expect(anonymous.json).toEqual({ authenticated: false })
     const admin = await login()
     const res = await api('/admin/session', { cookie: admin.cookie })
-    expect(res.json).toEqual({ authenticated: true, csrfToken: admin.csrf })
+    expect(res.json).toEqual({ authenticated: true, csrfToken: admin.csrf, role: 'admin' })
   })
 
   it('limite les échecs de connexion : 5 par 15 minutes et par IP', async () => {

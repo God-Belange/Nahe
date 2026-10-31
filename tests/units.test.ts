@@ -96,13 +96,15 @@ describe('règles d\'ouverture', () => {
 
 describe('schémas partagés', () => {
   it('normalise l\'e-mail, le téléphone et les valeurs par défaut', () => {
-    const r = reservationInputSchema.parse({ firstName: ' Ana ', lastName: 'B', email: ' ANA@Example.COM ', phone: '', quantity: 2, guests: [{ firstName: ' Bob ', lastName: 'C' }] })
-    expect(r).toMatchObject({ firstName: 'Ana', email: 'ana@example.com', phone: null, quantity: 2, paymentMethod: null, guests: [{ firstName: 'Bob', lastName: 'C' }] })
-    expect(reservationInputSchema.parse({ firstName: 'a', lastName: 'b', email: 'a@b.fr' }).quantity).toBe(1)
+    const r = reservationInputSchema.parse({ firstName: ' Ana ', lastName: 'B', email: ' ANA@Example.COM ', phone: '06 12 34 56 78', quantity: 2, guests: [{ firstName: ' Bob ', lastName: 'C' }] })
+    expect(r).toMatchObject({ firstName: 'Ana', email: 'ana@example.com', phone: '+33612345678', quantity: 2, paymentMethod: null, guests: [{ firstName: 'Bob', lastName: 'C' }] })
+    expect(reservationInputSchema.parse({ firstName: 'a', lastName: 'b', email: 'a@b.fr', phone: '0612345678' }).quantity).toBe(1)
+    expect(reservationInputSchema.safeParse({ firstName: 'a', lastName: 'b', email: 'a@b.fr', phone: '  ' }).success).toBe(false)
+    expect(reservationInputSchema.safeParse({ firstName: 'a', lastName: 'b', email: 'a@b.fr' }).success).toBe(false)
   })
 
   it('exige le prénom et le nom de chaque place au-delà de la première', () => {
-    const base = { firstName: 'a', lastName: 'b', email: 'a@b.fr', quantity: 3 }
+    const base = { firstName: 'a', lastName: 'b', email: 'a@b.fr', phone: '0612345678', quantity: 3 }
     const none = reservationInputSchema.safeParse(base)
     expect(none.success).toBe(false)
     expect(none.error!.issues.map((i) => i.path.join('.'))).toEqual(
@@ -115,7 +117,7 @@ describe('schémas partagés', () => {
   })
 
   it('refuse un moyen de paiement inconnu et une clé d\'idempotence invalide', () => {
-    const base = { firstName: 'a', lastName: 'b', email: 'a@b.fr' }
+    const base = { firstName: 'a', lastName: 'b', email: 'a@b.fr', phone: '0612345678' }
     expect(reservationInputSchema.safeParse({ ...base, paymentMethod: 'cash' }).success).toBe(false)
     expect(reservationInputSchema.safeParse({ ...base, idempotencyKey: 'x' }).success).toBe(false)
   })
@@ -126,6 +128,7 @@ describe('schémas partagés', () => {
     const fields = Object.fromEntries(r.error!.issues.map((i) => [i.path[0], i.message]))
     expect(fields.firstName).toBe('Ce champ est obligatoire')
     expect(fields.email).toBe('Adresse e-mail invalide')
+    expect(fields.phone).toBe('Ce champ est obligatoire')
   })
 
   it('convertit les dates en ISO UTC', () => {

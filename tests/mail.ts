@@ -26,3 +26,8 @@ export function installMailMock() {
     throw new Error(`Appel réseau inattendu pendant les tests : ${url}`)
   })
 }
+
+/** E-mails de billets uniquement (hors e-mail du lien de suivi envoyé à la réservation). */
+export function ticketMails(): SentMail[] {
+  return mailbox.sent.filter((m) => /^Vo(s|tre) billets?/.test(m.subject))
+}
