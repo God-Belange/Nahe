@@ -6,11 +6,13 @@ import {
   EMAIL_TEMPLATE_LIMITS,
   EMAIL_VARIABLES,
   capitalizeFirst,
+  fillPlaceholders,
   renderPlainText,
   sampleValues,
 } from '../../../shared/email-templates'
 import type { EmailTemplateContent } from '../../../shared/email-templates'
 import type { EmailTemplateView } from '../../../shared/types'
+import { RichText } from '../../components/RichText'
 import { ConfirmModal } from '../../components/admin/ConfirmModal'
 import { PageHeader } from '../../components/admin/PageHeader'
 import { Button } from '../../components/ui/Button'
@@ -110,6 +112,7 @@ function TemplateEditor({ template, onChange }: { template: EmailTemplateView; o
           error={errors.footer}
           onChange={(e) => set('footer', e.target.value)}
           maxLength={EMAIL_TEMPLATE_LIMITS.footer}
+          hint="Entourez un texte de **deux astérisques** pour le mettre en gras."
         />
 
         <details className="rounded-[var(--radius-control)] border border-line bg-cream/60 px-4 py-3 text-sm">
@@ -127,9 +130,9 @@ function TemplateEditor({ template, onChange }: { template: EmailTemplateView; o
         <section aria-label={`Aperçu de ${label.title}`} className="rounded-[var(--radius-control)] border border-dashed border-line px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Aperçu avec un exemple</p>
           <p className="mt-2 text-sm"><span className="text-ink-muted">Objet : </span><strong>{capitalizeFirst(renderPlainText(form.subject, sample))}</strong></p>
-          <p className="mt-2 whitespace-pre-line text-sm">{renderPlainText(form.intro, sample)}</p>
+          <p className="mt-2 whitespace-pre-line text-sm"><RichText text={fillPlaceholders(form.intro, sample)} /></p>
           <p className="my-2 text-sm italic text-ink-muted">[ détails de l'événement{kind === 'tickets' ? ' et QR codes des billets' : ' et bouton « Suivre ma réservation »'} ]</p>
-          {form.footer.trim() && <p className="whitespace-pre-line text-sm text-ink-soft">{renderPlainText(form.footer, sample)}</p>}
+          {form.footer.trim() && <p className="whitespace-pre-line text-sm text-ink-soft"><RichText text={fillPlaceholders(form.footer, sample)} /></p>}
         </section>
 
         <div className="flex flex-wrap justify-end gap-2">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_EMAIL_TEMPLATES, unknownPlaceholders } from '../shared/email-templates'
+import { parseBold } from '../shared/rich-text'
 import type { EmailTemplateView } from '../shared/types'
 import { buildTicketsEmail, buildTrackingEmail } from '../worker/services/mailer'
 import { adminApi, api, configurePayments, daysFromNow, login, makeEvent, reserve, reserveAndConfirm } from './helpers'
@@ -65,6 +66,20 @@ describe('modèle personnalisé', () => {
       { subject: '{{adresse}}', intro: 'x', footer: '' },
     )
     expect(none.subject).toBe('Votre billet pour Soirée <b>été</b>')
+  })
+
+  it('met en gras avec ** dans l\'e-mail et dans l\'aperçu', () => {
+    const mail = buildTicketsEmail(
+      { ...ticketsInput, tickets: [{ seq: 1, token: 'a.b' }] },
+      { subject: 'x', intro: 'Un ** Test** ici et **{{prenom}}**', footer: '' },
+    )
+    expect(mail.html).toContain('Un <strong> Test</strong> ici et <strong>Camille</strong>')
+    expect(parseBold('Un ** Test** ici')).toEqual([
+      { text: 'Un ', bold: false },
+      { text: ' Test', bold: true },
+      { text: ' ici', bold: false },
+    ])
+    expect(parseBold('**a**\n**b**').map((s) => s.text)).toEqual(['a', '\n', 'b'])
   })
 
   it('détecte les variables inconnues', () => {

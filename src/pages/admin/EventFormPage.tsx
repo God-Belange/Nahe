@@ -270,7 +270,7 @@ export default function EventFormPage() {
           <Card className="space-y-4">
             <h2 className="text-xl font-bold">L'essentiel</h2>
             <TextField label="Titre" required value={form.title} error={errors.title} onChange={(e) => set('title', e.target.value)} maxLength={120} />
-            <TextAreaField label="Description" value={form.description} error={errors.description} onChange={(e) => set('description', e.target.value)} maxLength={5000} />
+            <TextAreaField label="Description" value={form.description} error={errors.description} onChange={(e) => set('description', e.target.value)} maxLength={5000} hint="Entourez un texte de **deux astérisques** pour le mettre en gras." />
             <TextField label="Nom du lieu" required placeholder="Chez Sam, Salle des fêtes…" value={form.location} error={errors.location} onChange={(e) => set('location', e.target.value)} maxLength={200} />
             <TextField label="Adresse" optional placeholder="12 rue des Lilas, 59000 Lille" autoComplete="street-address" value={form.address} error={errors.address} onChange={(e) => set('address', e.target.value)} maxLength={300} />
             <CoverImageField value={form.coverImageUrl} error={errors.coverImageUrl} onChange={(url) => set('coverImageUrl', url)} />

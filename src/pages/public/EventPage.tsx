@@ -4,6 +4,7 @@ import type { PublicEvent } from '../../../shared/types'
 import { AddressLink } from '../../components/AddressLink'
 import { EventCover } from '../../components/EventCover'
 import { ShareButton } from '../../components/ShareButton'
+import { RichText } from '../../components/RichText'
 import { PrivateMeta } from '../../components/PrivateMeta'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
@@ -107,7 +108,7 @@ export default function EventPage({ mode }: { mode: EventMode }) {
             )}
             <section aria-labelledby="titre">
               <h1 id="titre" className="mb-3 text-3xl font-extrabold text-balance sm:text-4xl">{event.title}</h1>
-              {event.description && <p className="leading-relaxed whitespace-pre-line text-ink-soft">{event.description}</p>}
+              {event.description && <p className="leading-relaxed whitespace-pre-line text-ink-soft"><RichText text={event.description} /></p>}
             </section>
             {event.extraInfo && (
               <section aria-labelledby="infos">
