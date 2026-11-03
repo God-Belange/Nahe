@@ -15,6 +15,16 @@ export function formatPrice(cents: number): string {
   return cents === 0 ? 'Gratuit' : formatEuros(cents)
 }
 
+/** Annonce du prix « sur place » tant qu'il n'est pas encore en vigueur (sinon null). */
+export function upcomingDoorPrice(
+  event: { doorPriceCents: number | null; doorPriceFrom: string | null },
+  now: Date = new Date(),
+): string | null {
+  if (event.doorPriceCents === null || event.doorPriceFrom === null) return null
+  if (event.doorPriceFrom <= now.toISOString()) return null
+  return `${formatPrice(event.doorPriceCents)} à partir du ${formatFullDate(event.doorPriceFrom)}`
+}
+
 const dateLong = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', timeZone: TZ })
 const dateOnly = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', timeZone: TZ })
 const timeOnly = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit', timeZone: TZ })

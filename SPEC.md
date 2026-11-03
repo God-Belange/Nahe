@@ -119,7 +119,7 @@ Moderne, chaleureuse, festive — **pas** le style d'une billetterie professionn
 
 ### 4.2 Page événement
 
-Contenu : titre, description, image de couverture, date/heure, lieu (nom puis adresse), prix (€), capacité, places restantes (si activé), date limite de réservation, informations complémentaires, bouton « Je réserve ma place ».
+Contenu : titre, description, image de couverture, date/heure, lieu (nom puis adresse), prix (€), places restantes (si activé ; la capacité totale n'est pas affichée), date limite de réservation, informations complémentaires, bouton « Je réserve ma place ».
 
 - **Visibilité** : un événement est soit `public` (listé, accessible via slug), soit `private` (non listé, accessible uniquement via un lien contenant un `invite_token` aléatoire). L'admin copie le lien en un clic, avec un bouton « Partager » (feuille de partage du système via Web Share API, copie du message en repli).
 - Le bouton de réservation est désactivé, avec un message explicite, si l'événement est complet, fermé, annulé, passé ou si la date limite est dépassée. Le serveur applique ces règles indépendamment du front.
@@ -212,6 +212,8 @@ Créer, modifier, définir image/date/lieu (nom + adresse)/prix/capacité/affich
 
 Statuts d'événement : `draft`, `published`, `closed` (réservations fermées), `cancelled`.
 
+Prix : un événement a un **prix de réservation** et, facultativement, un **prix sur place** (montant + date d'effet, saisis ensemble). Le prix applicable est choisi côté serveur à l'instant de la réservation (`shared/pricing.ts`, même règle en SQL dans l'`INSERT … SELECT` atomique) : avant la date d'effet, prix de réservation ; à partir de cette date, prix sur place (il peut être plus élevé, plus bas ou gratuit). Les pages publiques affichent le prix en vigueur et annoncent « Puis X € à partir du … » tant que le second tarif n'est pas atteint.
+
 Garde-fous : impossible de réduire la capacité sous le nombre de places déjà prises ; changer le prix n'affecte pas les réservations existantes (le montant est figé à la création) ; l'annulation d'un événement n'annule pas automatiquement les paiements déjà faits, elle affiche un avertissement et la liste des remboursements à traiter manuellement.
 
 ### 5.2 Réservations
@@ -259,7 +261,8 @@ D1 + Drizzle ORM. Montants en **centimes entiers**. Dates en ISO 8601 UTC (texte
 | address | texte, défaut `''` (adresse postale, facultative, ≤ 300 caractères) |
 | show_remaining | booléen, défaut vrai (afficher ou non le compteur de places restantes) |
 | starts_at, ends_at | NOT NULL / nullable ; `ends_at > starts_at` |
-| price_cents | INTEGER ≥ 0 |
+| price_cents | INTEGER ≥ 0 (prix de réservation) |
+| door_price_cents, door_price_from | nullables, renseignés ensemble : prix « sur place / jour même » (INTEGER ≥ 0) et date d'effet (≤ `starts_at`) |
 | capacity | INTEGER ≥ 1 |
 | booking_deadline | nullable, ≤ `starts_at` |
 | extra_info | texte |
@@ -306,7 +309,7 @@ Index : `event_id`, `(event_id, payment_status)`, `access_token_hash`, `referenc
 
 Index : `reservation_id`, `(event_id, status)`. Le jeton affiché dans le QR n'est **pas stocké** : il est dérivé (`id` + HMAC de l'`id`) et vérifié à chaque scan.
 
-`reservations` reçoit en plus : `tickets_emailed_at` (nullable), `anonymized_at`, `expired_at`.
+`reservations` reçoit en plus : `tickets_emailed_at` (nullable), `reminded_at` (nullable, dernière relance de paiement), `anonymized_at`, `expired_at`.
 
 ### `email_templates`
 
@@ -359,6 +362,7 @@ Préfixe `/api`. Réponses JSON, erreurs au format `{ error: { code, message, fi
 | POST | `/admin/events/:id/{publish,unpublish,close,cancel}` | Changements d'état |
 | GET | `/admin/reservations` | Liste filtrée / recherche |
 | POST | `/admin/reservations/:id/{confirm,cancel}` | Actions |
+| DELETE | `/admin/reservations/:id` | Supprime définitivement une réservation **annulée ou expirée** et ses billets (409 sinon) |
 | POST | `/admin/reservations/:id/regenerate-link` | Nouveau lien de suivi (invalide l'ancien) |
 | GET | `/admin/reservations.csv` | Export |
 | GET/PUT | `/admin/payment-settings` | Paramètres |
@@ -372,6 +376,7 @@ Préfixe `/api`. Réponses JSON, erreurs au format `{ error: { code, message, fi
 
 **Rôles.** `POST /admin/session` accepte le mot de passe organisateur (`ADMIN_PASSWORD_HASH`) ou, s'il est configuré, le code d'accès du personnel d'entrée (`SCANNER_PASSWORD_HASH`) ; le code saisi fixe le rôle de la session (`admin` ou `scanner`, colonne `admin_sessions.role`). Le rôle `scanner` n'est autorisé que sur `/admin/scan/events`, `/admin/tickets/*` et `/admin/events/:id/tickets` ; toute autre route `/admin/*` répond 403 `forbidden`. Même limitation de débit à la connexion, mêmes protections CSRF/Origin.
 | POST | `/admin/reservations/:id/resend-tickets` | Renvoyer l'e-mail des billets |
+| POST | `/admin/reservations/:id/remind` | Relance de paiement par e-mail (réservation `pending` non expirée, sinon 409). Génère un **nouveau lien de suivi**, enregistré seulement si l'e-mail est accepté (l'ancien lien est alors invalidé) ; `reminded_at` mis à jour ; plafond de 3 envois/24 h par adresse et événement |
 
 L'API publique ne renvoie jamais de données de participants (noms, e-mails) ; elle n'expose que des compteurs. Seules exceptions : la page de suivi (son titulaire), et la page billet qui n'affiche que le prénom du titulaire et `i / N`. Le suivi d'une réservation confirmée inclut les jetons de ses billets.
 

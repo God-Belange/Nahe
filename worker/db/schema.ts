@@ -26,6 +26,8 @@ export const events = sqliteTable(
     startsAt: text('starts_at').notNull(),
     endsAt: text('ends_at'),
     priceCents: integer('price_cents').notNull(),
+    doorPriceCents: integer('door_price_cents'),
+    doorPriceFrom: text('door_price_from'),
     capacity: integer('capacity').notNull(),
     bookingDeadline: text('booking_deadline'),
     extraInfo: text('extra_info').notNull().default(''),
@@ -76,6 +78,7 @@ export const reservations = sqliteTable(
     expiredAt: text('expired_at'),
     anonymizedAt: text('anonymized_at'),
     ticketsEmailedAt: text('tickets_emailed_at'),
+    remindedAt: text('reminded_at'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [
@@ -126,7 +129,7 @@ export const paymentSettings = sqliteTable('payment_settings', {
 })
 
 export const emailTemplates = sqliteTable('email_templates', {
-  kind: text('kind', { enum: ['tickets', 'tracking'] }).primaryKey(),
+  kind: text('kind', { enum: ['tickets', 'tracking', 'reminder'] }).primaryKey(),
   subject: text('subject').notNull(),
   intro: text('intro').notNull(),
   footer: text('footer').notNull(),

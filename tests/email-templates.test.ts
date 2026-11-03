@@ -101,7 +101,7 @@ describe('API admin des modèles', () => {
     const res = await adminApi(admin, '/email-templates')
     expect(res.status).toBe(200)
     const list = res.json as EmailTemplateView[]
-    expect(list.map((t) => t.kind)).toEqual(['tickets', 'tracking'])
+    expect(list.map((t) => t.kind)).toEqual(['tickets', 'tracking', 'reminder'])
     for (const t of list) {
       expect(t).toMatchObject({ ...DEFAULT_EMAIL_TEMPLATES[t.kind], customized: false, updatedAt: null })
     }

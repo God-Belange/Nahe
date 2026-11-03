@@ -38,9 +38,22 @@ function mailToast(result: MailResult | undefined, email: string, confirmed: boo
   }
 }
 
+function reminderToast(result: MailResult | undefined, email: string): { text: string; tone: 'ok' | 'bad' | 'info' } {
+  switch (result) {
+    case 'sent':
+      return { text: `Relance envoyée à ${email}`, tone: 'ok' }
+    case 'not_configured':
+      return { text: "Envoi d'e-mails non configuré (clé Brevo absente) : aucune relance envoyée.", tone: 'info' }
+    case 'quota':
+      return { text: "Quota d'envoi atteint pour aujourd'hui : réessayez plus tard.", tone: 'bad' }
+    default:
+      return { text: "Échec de l'envoi : réessayez plus tard. Le lien de suivi actuel reste valide.", tone: 'bad' }
+  }
+}
+
 const methodLabel = (r: AdminReservation) => (r.paymentMethod ? fr.payment[r.paymentMethod] : '—')
 
-type Pending = { kind: 'confirm' | 'cancel'; reservation: AdminReservation }
+type Pending = { kind: 'confirm' | 'cancel' | 'delete' | 'remind'; reservation: AdminReservation }
 
 export default function ReservationsPage() {
   useDocumentTitle('Réservations')
@@ -87,11 +100,19 @@ export default function ReservationsPage() {
     if (!pending) return
     setBusy(true)
     try {
-      const res = await api.post<ReservationActionResult>(`/admin/reservations/${pending.reservation.id}/${pending.kind}`)
-      if (pending.kind === 'confirm') {
+      if (pending.kind === 'delete') {
+        await api.delete(`/admin/reservations/${pending.reservation.id}`)
+        toast.show('Réservation supprimée')
+      } else if (pending.kind === 'remind') {
+        const res = await api.post<ReservationActionResult>(`/admin/reservations/${pending.reservation.id}/remind`)
+        const m = reminderToast(res.reminderEmail, pending.reservation.email)
+        toast.show(m.text, m.tone)
+      } else if (pending.kind === 'confirm') {
+        const res = await api.post<ReservationActionResult>(`/admin/reservations/${pending.reservation.id}/confirm`)
         const m = mailToast(res.ticketsEmail, pending.reservation.email, true)
         toast.show(m.text, m.tone)
       } else {
+        await api.post<ReservationActionResult>(`/admin/reservations/${pending.reservation.id}/cancel`)
         toast.show('Réservation annulée')
       }
       setPending(null)
@@ -192,8 +213,8 @@ export default function ReservationsPage() {
                     </p>
                     <p className="text-xs text-ink-muted"><span className="font-mono">{r.reference}</span> · {formatFullDate(r.createdAt)}</p>
                     {r.paymentDeclaredAt && r.status === 'pending' && <Badge tone="sun">💸 Paiement déclaré</Badge>}
-                    <TicketsMail r={r} />
-                    <RowActions r={r} onConfirm={() => setPending({ kind: 'confirm', reservation: r })} onCancel={() => setPending({ kind: 'cancel', reservation: r })} onRegen={() => regenerate(r)} onResend={() => resend(r)} />
+                    <TicketsMail r={r} /><ReminderMail r={r} />
+                    <RowActions r={r} onConfirm={() => setPending({ kind: 'confirm', reservation: r })} onCancel={() => setPending({ kind: 'cancel', reservation: r })} onDelete={() => setPending({ kind: 'delete', reservation: r })} onRemind={() => setPending({ kind: 'remind', reservation: r })} onRegen={() => regenerate(r)} onResend={() => resend(r)} />
                   </li>
                 ))}
               </ul>
@@ -232,8 +253,8 @@ export default function ReservationsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-ink-soft">{formatFullDate(r.createdAt)}</td>
                         <td className="px-4 py-3">
-                          <TicketsMail r={r} />
-                          <RowActions r={r} onConfirm={() => setPending({ kind: 'confirm', reservation: r })} onCancel={() => setPending({ kind: 'cancel', reservation: r })} onRegen={() => regenerate(r)} onResend={() => resend(r)} />
+                          <TicketsMail r={r} /><ReminderMail r={r} />
+                          <RowActions r={r} onConfirm={() => setPending({ kind: 'confirm', reservation: r })} onCancel={() => setPending({ kind: 'cancel', reservation: r })} onDelete={() => setPending({ kind: 'delete', reservation: r })} onRemind={() => setPending({ kind: 'remind', reservation: r })} onRegen={() => regenerate(r)} onResend={() => resend(r)} />
                         </td>
                       </tr>
                     ))}
@@ -247,9 +268,9 @@ export default function ReservationsPage() {
 
       <ConfirmModal
         open={pending !== null}
-        title={pending?.kind === 'confirm' ? 'Confirmer le paiement ?' : 'Annuler la réservation ?'}
-        confirmLabel={pending?.kind === 'confirm' ? 'Oui, paiement reçu' : 'Annuler la réservation'}
-        danger={pending?.kind === 'cancel'}
+        title={pending?.kind === 'confirm' ? 'Confirmer le paiement ?' : pending?.kind === 'remind' ? 'Relancer par e-mail ?' : pending?.kind === 'delete' ? 'Supprimer la réservation ?' : 'Annuler la réservation ?'}
+        confirmLabel={pending?.kind === 'confirm' ? 'Oui, paiement reçu' : pending?.kind === 'remind' ? 'Envoyer la relance' : pending?.kind === 'delete' ? 'Supprimer définitivement' : 'Annuler la réservation'}
+        danger={pending?.kind !== 'confirm' && pending?.kind !== 'remind'}
         loading={busy}
         onConfirm={runPending}
         onClose={() => setPending(null)}
@@ -269,6 +290,19 @@ export default function ReservationsPage() {
                 Les billets (un QR code par place) seront générés et envoyés par e-mail à {pending.reservation.email}.
               </p>
               </>
+            ) : pending.kind === 'remind' ? (
+              <>
+                <p>
+                  Un e-mail de rappel avec le montant à régler et un lien pour payer sera envoyé à {pending.reservation.email}.
+                </p>
+                <Alert tone="info" className="mt-3">
+                  Ce message contient un nouveau lien de suivi : celui de l'e-mail précédent ne fonctionnera plus. Le texte se modifie dans « E-mails ».
+                </Alert>
+              </>
+            ) : pending.kind === 'delete' ? (
+              <p>
+                La réservation <span className="font-mono">{pending.reservation.reference}</span> sera supprimée <strong>définitivement</strong>, ainsi que ses billets et son lien de suivi. Cette action est irréversible.
+              </p>
             ) : (
               <p>
                 Les places seront libérées.
@@ -317,12 +351,19 @@ function TicketsMail({ r }: { r: AdminReservation }) {
   )
 }
 
-function RowActions({ r, onConfirm, onCancel, onRegen, onResend }: { r: AdminReservation; onConfirm: () => void; onCancel: () => void; onRegen: () => void; onResend: () => void }) {
+function ReminderMail({ r }: { r: AdminReservation }) {
+  if (r.status !== 'pending' || !r.remindedAt) return null
+  return <p className="my-2 text-xs font-semibold text-ink-soft">✉ Relancé le {formatFullDate(r.remindedAt)}</p>
+}
+
+function RowActions({ r, onConfirm, onCancel, onDelete, onRemind, onRegen, onResend }: { r: AdminReservation; onConfirm: () => void; onCancel: () => void; onDelete: () => void; onRemind: () => void; onRegen: () => void; onResend: () => void }) {
   return (
     <div className="flex flex-wrap gap-2">
       {r.status === 'pending' && <Button size="sm" onClick={onConfirm}>Confirmer le paiement</Button>}
+      {r.status === 'pending' && <Button size="sm" variant="soft" onClick={onRemind}>Relancer</Button>}
       {r.status === 'confirmed' && <Button size="sm" variant="soft" onClick={onResend}>Renvoyer les billets</Button>}
       {(r.status === 'pending' || r.status === 'confirmed') && <Button size="sm" variant="secondary" onClick={onCancel}>Annuler</Button>}
+      {(r.status === 'cancelled' || r.status === 'expired') && <Button size="sm" variant="secondary" onClick={onDelete}>Supprimer</Button>}
       <Button size="sm" variant="ghost" onClick={onRegen}>Nouveau lien</Button>
     </div>
   )

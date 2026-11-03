@@ -2,6 +2,7 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { bookingBlockReason, BLOCK_REASON_MESSAGES, addHours } from '../../shared/booking'
 import type { PaymentMethod, ReservationStatus } from '../../shared/constants'
 import { parseGuests } from '../../shared/guests'
+import { currentPriceCents, currentPriceSql } from '../../shared/pricing'
 import { buildPaypalLink } from '../../shared/paypal'
 import { buildRevolutLink } from '../../shared/revolut'
 import type { ReservationInput } from '../../shared/schemas'
@@ -103,6 +104,8 @@ function buildView(
   }
 }
 
+const UNIT_PRICE = currentPriceSql('e', '?12')
+
 const INSERT_RESERVATION_SQL = `
 INSERT INTO reservations (
   id, event_id, reference, first_name, last_name, email, phone, quantity,
@@ -111,12 +114,12 @@ INSERT INTO reservations (
 )
 SELECT
   ?1, e.id, ?2, ?3, ?4, ?5, ?6, ?7,
-  e.price_cents * ?7,
-  CASE WHEN e.price_cents = 0 THEN NULL ELSE ?8 END,
-  CASE WHEN e.price_cents = 0 THEN 'confirmed' ELSE 'pending' END,
+  ${UNIT_PRICE} * ?7,
+  CASE WHEN ${UNIT_PRICE} = 0 THEN NULL ELSE ?8 END,
+  CASE WHEN ${UNIT_PRICE} = 0 THEN 'confirmed' ELSE 'pending' END,
   ?9, ?10,
-  CASE WHEN e.price_cents = 0 THEN NULL ELSE ?11 END,
-  CASE WHEN e.price_cents = 0 THEN ?12 ELSE NULL END,
+  CASE WHEN ${UNIT_PRICE} = 0 THEN NULL ELSE ?11 END,
+  CASE WHEN ${UNIT_PRICE} = 0 THEN ?12 ELSE NULL END,
   ?12,
   ?14
 FROM events e
@@ -125,14 +128,14 @@ WHERE e.id = ?13
   AND e.starts_at > ?12
   AND (e.booking_deadline IS NULL OR e.booking_deadline > ?12)
   AND ?7 <= e.max_per_booking
-  AND (e.price_cents = 0 OR ?8 IS NOT NULL)
+  AND (${UNIT_PRICE} = 0 OR ?8 IS NOT NULL)
   AND (
     SELECT COALESCE(SUM(r.quantity), 0) FROM reservations r
     WHERE r.event_id = e.id
       AND (r.payment_status = 'confirmed' OR (r.payment_status = 'pending' AND r.expires_at > ?12))
   ) + ?7 <= e.capacity
   AND (
-    e.price_cents = 0 OR NOT EXISTS (
+    ${UNIT_PRICE} = 0 OR NOT EXISTS (
       SELECT 1 FROM reservations r2
       WHERE r2.event_id = e.id AND r2.email = ?5
         AND r2.payment_status = 'pending' AND r2.expires_at > ?12
@@ -154,7 +157,7 @@ export async function createReservation(
   await expireDueReservations(db, now, eventId)
   const settings = await getPaymentSettings(db)
 
-  if (event.priceCents > 0) {
+  if (currentPriceCents(event, now) > 0) {
     if (!input.paymentMethod) {
       throw new ApiError(422, 'validation_error', 'Choisissez un moyen de paiement.', {
         paymentMethod: 'Choisissez un moyen de paiement',
@@ -265,7 +268,7 @@ async function explainRefusal(
   const reason = bookingBlockReason(fresh, remaining, now)
   if (reason && reason !== 'full') throw conflict(`booking_${reason}`, BLOCK_REASON_MESSAGES[reason])
 
-  if (fresh.priceCents > 0) {
+  if (currentPriceCents(fresh, now) > 0) {
     const duplicate = await db
       .select({ id: reservations.id })
       .from(reservations)
@@ -400,6 +403,7 @@ function toAdminReservation(
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     ticketsEmailedAt: row.ticketsEmailedAt,
+    remindedAt: row.remindedAt,
   }
 }
 
@@ -509,6 +513,19 @@ export async function cancelReservation(env: Env, id: string, now: Date): Promis
   }
   await voidTickets(env, id, now)
   return getAdminReservation(db, id)
+}
+
+/** Supprime définitivement une réservation annulée ou expirée (et ses billets, déjà invalidés). */
+export async function deleteInactiveReservation(env: Env, id: string): Promise<void> {
+  const db = getDb(env.DB)
+  const current = await getAdminReservation(db, id)
+  if (current.status !== 'cancelled' && current.status !== 'expired') {
+    throw conflict('invalid_transition', 'Seule une réservation annulée ou expirée peut être supprimée.')
+  }
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM tickets WHERE reservation_id = ?1`).bind(id),
+    env.DB.prepare(`DELETE FROM reservations WHERE id = ?1 AND payment_status IN ('cancelled', 'expired')`).bind(id),
+  ])
 }
 
 /** Génère un nouveau jeton de suivi ; l'ancien est invalidé. Le jeton n'est renvoyé qu'une fois. */

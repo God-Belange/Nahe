@@ -91,6 +91,7 @@ const slugField = z.preprocess(
 )
 const nullableDate = z.preprocess(emptyToNull, isoDate.nullable())
 const nullableImage = z.preprocess(emptyToNull, imagePath.nullable())
+const nullablePrice = z.number().int().min(0).max(1_000_000).nullable()
 
 const requiredShape = {
   title: trimmed(1, 120),
@@ -112,6 +113,8 @@ export interface EventDates {
   startsAt: string
   endsAt: string | null
   bookingDeadline: string | null
+  doorPriceCents?: number | null
+  doorPriceFrom?: string | null
 }
 
 /** Retourne la liste des erreurs de cohérence de dates (champ → message). */
@@ -122,6 +125,13 @@ export function checkEventDates(d: EventDates): Record<string, string> {
   }
   if (d.bookingDeadline !== null && d.bookingDeadline > d.startsAt) {
     errors.bookingDeadline = 'La date limite doit précéder le début'
+  }
+  const hasDoorPrice = d.doorPriceCents != null
+  const hasDoorFrom = d.doorPriceFrom != null
+  if (hasDoorPrice && !hasDoorFrom) errors.doorPriceFrom = "Indiquez la date d'application du prix sur place"
+  if (hasDoorFrom && !hasDoorPrice) errors.doorPriceCents = 'Indiquez le prix sur place'
+  if (d.doorPriceFrom != null && d.doorPriceFrom > d.startsAt) {
+    errors.doorPriceFrom = "Le prix sur place doit s'appliquer au plus tard au début de l'événement"
   }
   return errors
 }
@@ -138,6 +148,8 @@ export const createEventSchema = z
     coverImageUrl: nullableImage.nullish().transform((v) => v ?? null),
     endsAt: nullableDate.nullish().transform((v) => v ?? null),
     bookingDeadline: nullableDate.nullish().transform((v) => v ?? null),
+    doorPriceCents: nullablePrice.nullish().transform((v) => v ?? null),
+    doorPriceFrom: nullableDate.nullish().transform((v) => v ?? null),
     slug: slugField,
   })
   .superRefine((v, ctx) => {
@@ -155,6 +167,8 @@ export const updateEventSchema = z
     coverImageUrl: nullableImage,
     endsAt: nullableDate,
     bookingDeadline: nullableDate,
+    doorPriceCents: nullablePrice,
+    doorPriceFrom: nullableDate,
     slug: slugField,
   })
   .partial()

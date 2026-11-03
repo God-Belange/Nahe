@@ -67,7 +67,7 @@ Aucun secret n'est présent côté frontend ni dans le dépôt. En production : 
 
 ### Images
 
-Couverture d'événement et QR code Wero : dans l'admin, « Choisir une image » ouvre la galerie (ou l'appareil photo) du téléphone. L'image est réduite dans le navigateur puis stockée dans D1 (table `images`, 1 Mo max, sans service payant) ; les images devenues inutiles sont purgées par la tâche quotidienne. Nécessite d'appliquer les migrations `0003_images`, `0004_revolut_me_url`, `0005_wero_url`, `0006_reservation_guests`, `0007_wero_contact`, `0008_email_templates` et `0009_scanner_role` (`npm run db:migrate:remote`).
+Couverture d'événement et QR code Wero : dans l'admin, « Choisir une image » ouvre la galerie (ou l'appareil photo) du téléphone. L'image est réduite dans le navigateur puis stockée dans D1 (table `images`, 1 Mo max, sans service payant) ; les images devenues inutiles sont purgées par la tâche quotidienne. Nécessite d'appliquer les migrations `0003_images`, `0004_revolut_me_url`, `0005_wero_url`, `0006_reservation_guests`, `0007_wero_contact`, `0008_email_templates`, `0009_scanner_role`, `0010_door_price` et `0011_reminded_at` (`npm run db:migrate:remote`).
 
 Alternative : déposer le fichier dans `public/images/` (ex. `public/images/barbecue.jpg`), saisir `/images/barbecue.jpg` dans l'admin et redéployer.
 
@@ -81,7 +81,8 @@ Alternative : déposer le fichier dans `public/images/` (ex. `public/images/barb
 - **Sécurité des billets** : le jeton du QR est un identifiant aléatoire signé par HMAC (non stocké, infalsifiable) ; il ne contient aucune donnée personnelle.
 - **Gras dans la description** : dans la description d'un événement, entourez un texte de `**deux astérisques**` pour l'afficher en gras sur la page publique.
 - **E-mail** : envoyé via [Brevo](https://www.brevo.com) (gratuit, 300 e-mails/jour). L'envoi ne bloque jamais la confirmation ; en cas d'échec, l'organisateur voit l'état dans Réservations et peut **renvoyer les billets**. Plafonds anti-abus : 250 e-mails/jour au total, 3 par adresse et par événement.
-  - **Personnaliser les e-mails** : `/admin/emails` permet de modifier l'objet, l'introduction et la conclusion des e-mails de billets et de suivi (variables `{{prenom}}`, `{{evenement}}`…, gras avec `**texte**`, aperçu intégré, bouton « Rétablir le texte par défaut »). Nécessite la migration `0008_email_templates`.
+  - **Relancer un paiement** : sur `/admin/reservations`, le bouton « Relancer » d'une réservation en attente envoie un e-mail de rappel (montant, échéance, bouton « Payer ma réservation »). Le lien de suivi étant stocké sous forme de hash, l'e-mail contient un nouveau lien et l'ancien est invalidé (uniquement si l'envoi réussit). Nécessite la migration `0011_reminded_at` et la clé Brevo.
+  - **Personnaliser les e-mails** : `/admin/emails` permet de modifier l'objet, l'introduction et la conclusion des e-mails de billets, de suivi et de relance de paiement (variables `{{prenom}}`, `{{evenement}}`…, gras avec `**texte**`, aperçu intégré, bouton « Rétablir le texte par défaut »). Nécessite la migration `0008_email_templates`.
   - ⚠ **Délivrabilité** : sans nom de domaine propre authentifié (SPF/DKIM/DMARC), Brevo envoie depuis votre adresse d'expéditeur vérifiée mais certains fournisseurs (Gmail, Outlook) peuvent classer le message en indésirable. D'où la redondance : billets toujours visibles sur le lien de suivi et renvoyables.
 
 ### Configurer Brevo (une seule fois, gratuit)

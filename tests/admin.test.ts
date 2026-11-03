@@ -10,6 +10,7 @@ describe('authentification admin', () => {
     ['GET', '/reservations'],
     ['GET', '/reservations.csv'],
     ['POST', '/reservations/x/confirm'],
+    ['DELETE', '/reservations/x'],
     ['GET', '/payment-settings'],
     ['PUT', '/payment-settings'],
   ])('refuse %s /admin%s sans session (401)', async (method, path) => {
@@ -272,5 +273,52 @@ describe('paramètres de paiement', () => {
     })
     expect(res.status).toBe(422)
     expect(res.json.error.fields[field]).toBeDefined()
+  })
+})
+
+describe('suppression des réservations annulées ou expirées', () => {
+  it('supprime une réservation annulée avec ses billets', async () => {
+    await configurePayments()
+    const event = await makeEvent({ priceCents: 1000 })
+    await reserve(event.id, { quantity: 2 })
+    const admin = await login()
+    const id = (await adminApi(admin, '/reservations')).json.items[0].id
+    await adminApi(admin, `/reservations/${id}/confirm`, { method: 'POST' })
+    await adminApi(admin, `/reservations/${id}/cancel`, { method: 'POST' })
+
+    const del = await adminApi(admin, `/reservations/${id}`, { method: 'DELETE' })
+    expect(del.status).toBe(204)
+    expect((await adminApi(admin, '/reservations')).json.total).toBe(0)
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM tickets WHERE reservation_id = ?').bind(id).first<{ n: number }>()
+    expect(left?.n).toBe(0)
+  })
+
+  it('supprime une réservation expirée', async () => {
+    await configurePayments()
+    const event = await makeEvent({ priceCents: 1000 })
+    await reserve(event.id, { quantity: 1 })
+    const admin = await login()
+    const id = (await adminApi(admin, '/reservations')).json.items[0].id
+    await env.DB.prepare(`UPDATE reservations SET payment_status = 'expired', expired_at = ?2 WHERE id = ?1`).bind(id, new Date().toISOString()).run()
+
+    expect((await adminApi(admin, `/reservations/${id}`, { method: 'DELETE' })).status).toBe(204)
+    expect((await adminApi(admin, '/reservations')).json.total).toBe(0)
+  })
+
+  it.each(['pending', 'confirmed'])('refuse de supprimer une réservation %s (409)', async (state) => {
+    await configurePayments()
+    const event = await makeEvent({ priceCents: 1000 })
+    await reserve(event.id, { quantity: 1 })
+    const admin = await login()
+    const id = (await adminApi(admin, '/reservations')).json.items[0].id
+    if (state === 'confirmed') await adminApi(admin, `/reservations/${id}/confirm`, { method: 'POST' })
+    const del = await adminApi(admin, `/reservations/${id}`, { method: 'DELETE' })
+    expect(del.status).toBe(409)
+    expect((await adminApi(admin, '/reservations')).json.total).toBe(1)
+  })
+
+  it('renvoie 404 pour une réservation inconnue', async () => {
+    const admin = await login()
+    expect((await adminApi(admin, '/reservations/inconnue', { method: 'DELETE' })).status).toBe(404)
   })
 })

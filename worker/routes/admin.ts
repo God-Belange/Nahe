@@ -40,6 +40,7 @@ import {
 import { hitRateLimit, peekRateLimit, rateLimitKey } from '../services/rate-limit'
 import {
   cancelReservation,
+  deleteInactiveReservation,
   confirmReservation,
   exportReservationsCsv,
   getAdminReservationById,
@@ -47,7 +48,7 @@ import {
   regenerateAccessLink,
 } from '../services/reservations'
 import { saveImage } from '../services/images'
-import { sendTicketsEmail } from '../services/mailer'
+import { sendReminderEmail, sendTicketsEmail } from '../services/mailer'
 import { getPaymentSettings, savePaymentSettings } from '../services/settings'
 import {
   checkInByToken,
@@ -170,9 +171,25 @@ adminRoutes.post('/reservations/:id/resend-tickets', async (c) => {
   return c.json({ ...(await getAdminReservationById(c.env, id)), ticketsEmail })
 })
 
+adminRoutes.post('/reservations/:id/remind', async (c) => {
+  const id = c.req.param('id')
+  const now = new Date()
+  const reservation = await getAdminReservationById(c.env, id)
+  if (reservation.status !== 'pending' || !reservation.expiresAt || reservation.expiresAt <= now.toISOString()) {
+    throw new ApiError(409, 'invalid_transition', 'Seule une réservation en attente de paiement peut être relancée.')
+  }
+  const reminderEmail = await sendReminderEmail(c.env, id, new URL(c.req.url).origin, now)
+  return c.json({ ...(await getAdminReservationById(c.env, id)), reminderEmail })
+})
+
 adminRoutes.post('/reservations/:id/cancel', async (c) =>
   c.json(await cancelReservation(c.env, c.req.param('id'), new Date())),
 )
+
+adminRoutes.delete('/reservations/:id', async (c) => {
+  await deleteInactiveReservation(c.env, c.req.param('id'))
+  return c.body(null, 204)
+})
 
 adminRoutes.post('/reservations/:id/regenerate-link', async (c) =>
   c.json(await regenerateAccessLink(c.env, c.req.param('id'))),

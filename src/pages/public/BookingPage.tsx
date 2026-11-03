@@ -16,7 +16,7 @@ import { usePublicEvent, type EventMode } from '../../hooks/usePublicEvent'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { accentFor, accentStyle } from '../../lib/accent'
 import { api, ApiClientError, errorMessage } from '../../lib/api'
-import { formatEuros, formatEventSchedule, formatPrice } from '../../lib/format'
+import { formatEuros, formatEventSchedule, formatPrice, upcomingDoorPrice } from '../../lib/format'
 import { fr } from '../../lib/fr'
 import { eventPath, invitePath, trackingPath } from '../../lib/links'
 
@@ -243,6 +243,7 @@ function BookingForm({ event, mode, param }: { event: PublicEvent; mode: EventMo
 }
 
 function Summary({ event, quantity, total }: { event: PublicEvent; quantity: number; total: number }) {
+  const doorNotice = upcomingDoorPrice(event)
   return (
     <Card className="overflow-hidden p-0">
       <EventCover src={event.coverImageUrl} natural className="w-full bg-ink/5" />
@@ -261,6 +262,7 @@ function Summary({ event, quantity, total }: { event: PublicEvent; quantity: num
             <dd className={cx('font-display text-2xl font-extrabold', total === 0 && 'text-ok')}>{total === 0 ? 'Gratuit' : formatEuros(total)}</dd>
           </div>
         </dl>
+        {doorNotice && <p className="text-xs text-ink-muted">Réservez maintenant au tarif ci-dessus : ensuite, {doorNotice}.</p>}
       </div>
     </Card>
   )

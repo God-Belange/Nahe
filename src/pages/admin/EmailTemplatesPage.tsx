@@ -131,7 +131,7 @@ function TemplateEditor({ template, onChange }: { template: EmailTemplateView; o
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Aperçu avec un exemple</p>
           <p className="mt-2 text-sm"><span className="text-ink-muted">Objet : </span><strong>{capitalizeFirst(renderPlainText(form.subject, sample))}</strong></p>
           <p className="mt-2 whitespace-pre-line text-sm"><RichText text={fillPlaceholders(form.intro, sample)} /></p>
-          <p className="my-2 text-sm italic text-ink-muted">[ détails de l'événement{kind === 'tickets' ? ' et QR codes des billets' : ' et bouton « Suivre ma réservation »'} ]</p>
+          <p className="my-2 text-sm italic text-ink-muted">[ détails de l'événement{kind === 'tickets' ? ' et QR codes des billets' : kind === 'reminder' ? ' et bouton « Payer ma réservation »' : ' et bouton « Suivre ma réservation »'} ]</p>
           {form.footer.trim() && <p className="whitespace-pre-line text-sm text-ink-soft"><RichText text={fillPlaceholders(form.footer, sample)} /></p>}
         </section>
 

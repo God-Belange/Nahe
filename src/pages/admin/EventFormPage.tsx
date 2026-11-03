@@ -38,6 +38,8 @@ interface FormState {
   endsAt: string
   bookingDeadline: string
   price: string
+  doorPrice: string
+  doorPriceFrom: string
   capacity: string
   maxPerBooking: string
   showRemaining: boolean
@@ -56,6 +58,8 @@ const EMPTY: FormState = {
   endsAt: '',
   bookingDeadline: '',
   price: '',
+  doorPrice: '',
+  doorPriceFrom: '',
   capacity: '20',
   maxPerBooking: '10',
   showRemaining: true,
@@ -74,7 +78,9 @@ function toForm(e: AdminEventDetail): FormState {
     startsAt: isoToParisLocal(e.startsAt),
     endsAt: isoToParisLocal(e.endsAt),
     bookingDeadline: isoToParisLocal(e.bookingDeadline),
-    price: centsToInput(e.priceCents),
+    price: centsToInput(e.basePriceCents),
+    doorPrice: e.doorPriceCents === null ? '' : centsToInput(e.doorPriceCents),
+    doorPriceFrom: isoToParisLocal(e.doorPriceFrom),
     capacity: String(e.capacity),
     maxPerBooking: String(e.maxPerBooking),
     showRemaining: e.showRemaining,
@@ -90,6 +96,11 @@ function buildPayload(form: FormState): { payload?: Record<string, unknown>; err
   const errors: Errors = {}
   const priceCents = parseEurosToCents(form.price === '' ? '0' : form.price)
   if (priceCents === null) errors.priceCents = 'Montant invalide (ex. 12,50)'
+  const doorPriceCents = form.doorPrice.trim() === '' ? null : parseEurosToCents(form.doorPrice)
+  if (form.doorPrice.trim() !== '' && doorPriceCents === null) errors.doorPriceCents = 'Montant invalide (ex. 15,00)'
+  const doorPriceFrom = form.doorPriceFrom ? parisLocalToIso(form.doorPriceFrom) : null
+  if (doorPriceCents !== null && !doorPriceFrom) errors.doorPriceFrom = "Indiquez la date d'application du prix sur place"
+  if (doorPriceCents === null && doorPriceFrom && !errors.doorPriceCents) errors.doorPriceCents = 'Indiquez le prix sur place'
   const startsAt = parisLocalToIso(form.startsAt)
   if (!startsAt) errors.startsAt = 'Ce champ est obligatoire'
   const endsAt = form.endsAt ? parisLocalToIso(form.endsAt) : null
@@ -113,6 +124,8 @@ function buildPayload(form: FormState): { payload?: Record<string, unknown>; err
       endsAt,
       bookingDeadline,
       priceCents,
+      doorPriceCents,
+      doorPriceFrom,
       capacity,
       maxPerBooking,
       showRemaining: form.showRemaining,
@@ -298,7 +311,7 @@ export default function EventFormPage() {
             <h2 className="text-xl font-bold">Prix et places</h2>
             <div className="grid gap-4 sm:grid-cols-3">
               <TextField
-                label="Prix par place (€)"
+                label="Prix de réservation (€)"
                 inputMode="decimal"
                 placeholder="0"
                 value={form.price}
@@ -309,6 +322,32 @@ export default function EventFormPage() {
               <TextField label="Capacité" type="number" inputMode="numeric" min={1} required value={form.capacity} error={errors.capacity} onChange={(e) => set('capacity', e.target.value)} />
               <TextField label="Max. par réservation" type="number" inputMode="numeric" min={1} required value={form.maxPerBooking} error={errors.maxPerBooking} onChange={(e) => set('maxPerBooking', e.target.value)} />
             </div>
+            <fieldset className="space-y-3 rounded-2xl border border-line p-4">
+              <legend className="px-1 text-sm font-bold">Prix sur place (facultatif)</legend>
+              <p className="text-sm text-ink-muted">
+                Un second tarif, appliqué aux réservations faites à partir d'une date choisie (par exemple le jour même ou sur place). Laissez les deux champs vides pour un prix unique.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label="Prix sur place (€)"
+                  optional
+                  inputMode="decimal"
+                  placeholder="ex. 15,00"
+                  value={form.doorPrice}
+                  error={errors.doorPriceCents}
+                  onChange={(e) => set('doorPrice', e.target.value)}
+                />
+                <TextField
+                  label="Applicable à partir du"
+                  type="datetime-local"
+                  optional
+                  value={form.doorPriceFrom}
+                  error={errors.doorPriceFrom}
+                  onChange={(e) => set('doorPriceFrom', e.target.value)}
+                  hint="Heure de Paris. Avant cette date, le prix de réservation s'applique."
+                />
+              </div>
+            </fieldset>
             <CheckboxField
               label="Afficher le nombre de places restantes"
               hint="Décoché : les visiteurs ne voient pas le compteur, seule la mention « Complet » apparaît quand il n'y a plus de place."

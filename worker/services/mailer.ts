@@ -8,7 +8,7 @@ import { fullName, parseGuests, ticketHolder } from '../../shared/guests'
 import { mapsUrl } from '../../shared/maps'
 import type { MailResult } from '../../shared/types'
 import { formatEventSchedule } from '../../shared/schedule'
-import { sha256Hex } from '../lib/crypto'
+import { randomToken, sha256Hex } from '../lib/crypto'
 import { asc, eq } from 'drizzle-orm'
 import { events, reservations, tickets } from '../db/schema'
 import { getDb } from '../lib/db'
@@ -135,7 +135,9 @@ export interface TrackingEmailInput {
 export function buildTrackingEmail(
   input: TrackingEmailInput,
   template: EmailTemplateContent = DEFAULT_EMAIL_TEMPLATES.tracking,
+  options: { fallback?: EmailTemplateContent; extraValues?: Values; button?: string } = {},
 ): { subject: string; html: string; text: string } {
+  const button = options.button ?? 'Suivre ma réservation'
   const when = formatEventSchedule(input.eventStartsAt, input.eventEndsAt)
   const url = `${input.origin}/r/${input.accessToken}`
   const place = input.eventAddress ? `${input.eventLocation}, ${input.eventAddress}` : input.eventLocation
@@ -147,8 +149,9 @@ export function buildTrackingEmail(
     adresse: input.eventAddress,
     reference: input.reference,
     lien: url,
+    ...options.extraValues,
   }
-  const subject = templateSubject(template, DEFAULT_EMAIL_TEMPLATES.tracking, values)
+  const subject = templateSubject(template, options.fallback ?? DEFAULT_EMAIL_TEMPLATES.tracking, values)
   const html = `<!doctype html><html lang="fr"><body style="margin:0;background:#fffaf3;font-family:Arial,Helvetica,sans-serif;color:#1b1230">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border-radius:16px;padding:24px">
@@ -156,18 +159,37 @@ export function buildTrackingEmail(
 ${templateToHtml(template.intro, values, { lastMargin: 16 })}
 <p style="margin:0 0 4px;font-size:18px;font-weight:700">${escapeHtml(input.eventTitle)}</p>
 <p style="margin:0 0 2px">${escapeHtml(when)}</p><p style="margin:0 0 16px">${escapeHtml(place)}</p>
-<p style="margin:0 0 16px;text-align:center"><a href="${escapeHtml(url)}" style="display:inline-block;background:#5b35d5;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">Suivre ma réservation</a></p>
+<p style="margin:0 0 16px;text-align:center"><a href="${escapeHtml(url)}" style="display:inline-block;background:#5b35d5;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">${escapeHtml(button)}</a></p>
 ${templateToHtml(template.footer, values, { lastMargin: 0, style: ';font-size:13px;color:#675d82', linkNames: ['lien'] })}</td></tr>
 </table></td></tr></table></body></html>`
   const text = [
     templateToText(template.intro, values),
     `${input.eventTitle} — ${when} — ${place}`,
     '',
-    `Suivre ma réservation (payer, retrouver mes billets) : ${url}`,
+    `${options.button ?? 'Suivre ma réservation (payer, retrouver mes billets)'} : ${url}`,
     '',
     templateToText(template.footer, values),
   ].join('\n')
   return { subject, html, text }
+}
+
+const euroFormat = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' })
+const expiryFormat = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone: 'Europe/Paris',
+})
+
+export function buildReminderEmail(
+  input: TrackingEmailInput & { amountCents: number; expiresAt: string },
+  template: EmailTemplateContent = DEFAULT_EMAIL_TEMPLATES.reminder,
+) {
+  return buildTrackingEmail(input, template, {
+    fallback: DEFAULT_EMAIL_TEMPLATES.reminder,
+    button: 'Payer ma réservation',
+    extraValues: {
+      montant: euroFormat.format(input.amountCents / 100).replace(/[  ]/g, ' '),
+      expiration: expiryFormat.format(new Date(input.expiresAt)).replace(':', 'h').replace(/h00$/, 'h'),
+    },
+  })
 }
 
 async function postToBrevo(
@@ -318,6 +340,65 @@ export async function sendTrackingEmail(
     return ok ? 'sent' : 'failed'
   } catch (err) {
     console.error('Envoi du lien de suivi impossible', err instanceof Error ? err.name : 'unknown')
+    return 'failed'
+  }
+}
+
+/**
+ * Relance de paiement d'une réservation en attente. Le jeton de suivi n'étant stocké que sous forme de hash,
+ * un nouveau lien est généré ; il n'est enregistré (et l'ancien invalidé) qu'une fois l'e-mail accepté
+ * par le fournisseur. Ne lève jamais d'exception.
+ */
+export async function sendReminderEmail(
+  env: Env,
+  reservationId: string,
+  origin: string,
+  now: Date,
+): Promise<MailResult> {
+  try {
+    if (!env.BREVO_API_KEY || !env.MAIL_FROM_EMAIL) return 'not_configured'
+    const db = getDb(env.DB)
+    const row = await db
+      .select({ reservation: reservations, event: events })
+      .from(reservations)
+      .innerJoin(events, eq(events.id, reservations.eventId))
+      .where(eq(reservations.id, reservationId))
+      .get()
+    const r = row?.reservation
+    if (!row || !r || r.paymentStatus !== 'pending' || r.anonymizedAt || !r.expiresAt || r.expiresAt <= now.toISOString()) {
+      return 'failed'
+    }
+
+    if ((await hitRateLimit(env.DB, 'mail:global', DAY_MS, now)) > MAIL_GLOBAL_DAILY_CAP) return 'quota'
+    const key = `mail:remind:${await sha256Hex(`${r.email}|${row.event.id}`)}`
+    if ((await hitRateLimit(env.DB, key, DAY_MS, now)) > MAIL_PER_ADDRESS_DAILY_CAP) return 'quota'
+
+    const accessToken = randomToken(32)
+    const message = buildReminderEmail(
+      {
+        origin,
+        eventTitle: row.event.title,
+        eventStartsAt: row.event.startsAt,
+        eventEndsAt: row.event.endsAt,
+        eventLocation: row.event.location,
+        eventAddress: row.event.address,
+        firstName: r.firstName,
+        reference: r.reference,
+        accessToken,
+        amountCents: r.totalAmountCents,
+        expiresAt: r.expiresAt,
+      },
+      await getEmailTemplate(db, 'reminder'),
+    )
+    const ok = await postToBrevo(env, { email: r.email, name: `${r.firstName} ${r.lastName}`.trim() }, message)
+    if (!ok) return 'failed'
+    await db
+      .update(reservations)
+      .set({ accessTokenHash: await sha256Hex(accessToken), remindedAt: now.toISOString() })
+      .where(eq(reservations.id, reservationId))
+    return 'sent'
+  } catch (err) {
+    console.error('Envoi de la relance impossible', err instanceof Error ? err.name : 'unknown')
     return 'failed'
   }
 }

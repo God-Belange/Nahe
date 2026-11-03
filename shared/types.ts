@@ -21,7 +21,14 @@ export interface PublicEvent {
   address: string
   startsAt: string
   endsAt: string | null
+  /** prix par place applicable maintenant (prix de réservation ou prix « sur place » une fois sa date atteinte) */
   priceCents: number
+  /** prix de réservation, avant la date d'effet du prix sur place */
+  basePriceCents: number
+  /** prix sur place / le jour même (null si un seul prix) */
+  doorPriceCents: number | null
+  /** date à partir de laquelle le prix sur place s'applique */
+  doorPriceFrom: string | null
   capacity: number
   remaining: number
   /** false : l'organisateur ne souhaite pas afficher le nombre de places restantes */
@@ -186,10 +193,13 @@ export interface AdminReservation {
   expiresAt: string | null
   createdAt: string
   ticketsEmailedAt: string | null
+  /** dernière relance de paiement envoyée par e-mail */
+  remindedAt: string | null
 }
 
 export interface ReservationActionResult extends AdminReservation {
   ticketsEmail?: MailResult
+  reminderEmail?: MailResult
 }
 
 export interface AdminReservationsPage {
@@ -220,7 +230,7 @@ export interface PaymentSettings {
 }
 
 export interface EmailTemplateView {
-  kind: 'tickets' | 'tracking'
+  kind: 'tickets' | 'tracking' | 'reminder'
   subject: string
   intro: string
   footer: string

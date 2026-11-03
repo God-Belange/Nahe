@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import { bookingBlockReason } from '../../shared/booking'
 import type { EventStatus, PaymentMethod } from '../../shared/constants'
+import { currentPriceCents } from '../../shared/pricing'
 import { checkEventDates } from '../../shared/schemas'
 import type { CreateEventInput, UpdateEventInput } from '../../shared/schemas'
 import type {
@@ -36,6 +37,7 @@ export function toPublicEvent(
   now: Date,
 ): PublicEvent {
   const remaining = Math.max(0, row.capacity - taken)
+  const priceCents = currentPriceCents(row, now)
   return {
     id: row.id,
     slug: row.slug,
@@ -46,7 +48,10 @@ export function toPublicEvent(
     address: row.address,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
-    priceCents: row.priceCents,
+    priceCents,
+    basePriceCents: row.priceCents,
+    doorPriceCents: row.doorPriceCents,
+    doorPriceFrom: row.doorPriceFrom,
     capacity: row.capacity,
     remaining,
     showRemaining: row.showRemaining,
@@ -54,7 +59,7 @@ export function toPublicEvent(
     extraInfo: row.extraInfo,
     status: row.status,
     maxPerBooking: row.maxPerBooking,
-    paymentMethods: row.priceCents > 0 ? methods : [],
+    paymentMethods: priceCents > 0 ? methods : [],
     blockReason: bookingBlockReason(row, remaining, now),
   }
 }
@@ -205,6 +210,8 @@ export async function createEvent(
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         priceCents: input.priceCents,
+        doorPriceCents: input.doorPriceCents,
+        doorPriceFrom: input.doorPriceFrom,
         capacity: input.capacity,
         bookingDeadline: input.bookingDeadline,
         extraInfo: input.extraInfo,

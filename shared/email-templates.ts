@@ -1,4 +1,4 @@
-export const EMAIL_TEMPLATE_KINDS = ['tickets', 'tracking'] as const
+export const EMAIL_TEMPLATE_KINDS = ['tickets', 'tracking', 'reminder'] as const
 export type EmailTemplateKind = (typeof EMAIL_TEMPLATE_KINDS)[number]
 
 export interface EmailTemplateContent {
@@ -17,6 +17,10 @@ export const EMAIL_TEMPLATE_LABELS: Record<EmailTemplateKind, { title: string; d
   tracking: {
     title: 'E-mail de suivi de réservation',
     description: "Envoyé à l'invité dès qu'il réserve. Le bouton « Suivre ma réservation » est ajouté automatiquement sous l'introduction.",
+  },
+  reminder: {
+    title: 'E-mail de relance de paiement',
+    description: "Envoyé quand vous cliquez sur « Relancer » sur une réservation en attente de paiement. Le bouton « Payer ma réservation » (nouveau lien de suivi) est ajouté automatiquement sous l'introduction.",
   },
 }
 
@@ -46,6 +50,12 @@ export const EMAIL_VARIABLES: Record<EmailTemplateKind, EmailVariable[]> = {
     ...COMMON_VARIABLES,
     { name: 'lien', description: 'Lien de suivi secret (cliquable dans l’e-mail)', example: 'https://nahe.example/r/…' },
   ],
+  reminder: [
+    ...COMMON_VARIABLES,
+    { name: 'lien', description: 'Nouveau lien de suivi secret (cliquable dans l’e-mail)', example: 'https://nahe.example/r/…' },
+    { name: 'montant', description: 'Montant à régler', example: '25,00 €' },
+    { name: 'expiration', description: "Date limite avant libération des places", example: 'samedi 7 novembre à 18h30' },
+  ],
 }
 
 export const DEFAULT_EMAIL_TEMPLATES: Record<EmailTemplateKind, EmailTemplateContent> = {
@@ -61,6 +71,13 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<EmailTemplateKind, EmailTemplateCon
       "Bonjour {{prenom}}, votre réservation est enregistrée. Elle est valide une fois le paiement confirmé par l'organisateur.",
     footer:
       'Référence {{reference}}. Ce lien vous permet de payer, de suivre votre réservation et de retrouver vos billets.\nIl est secret : ne le partagez pas. Lien direct : {{lien}}',
+  },
+  reminder: {
+    subject: 'Rappel : finalisez votre réservation pour {{evenement}}',
+    intro:
+      "Bonjour {{prenom}}, votre réservation pour {{evenement}} attend toujours son paiement.\nPensez à régler **{{montant}}** avant le {{expiration}}, sinon vos places seront libérées.",
+    footer:
+      "Référence {{reference}}. Si vous avez déjà payé, indiquez-le depuis le lien : l'organisateur vérifiera.\nCe lien remplace celui de votre précédent e-mail ; il est secret, ne le partagez pas. Lien direct : {{lien}}",
   },
 }
 

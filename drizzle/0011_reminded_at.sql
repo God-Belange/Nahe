@@ -1,0 +1,1 @@
+ALTER TABLE `reservations` ADD `reminded_at` text;

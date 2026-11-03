@@ -9,13 +9,12 @@ import { PrivateMeta } from '../../components/PrivateMeta'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
-import { cx } from '../../components/ui/cx'
 import { Alert, EmptyState, ErrorState, PageLoader } from '../../components/ui/feedback'
 import { usePublicEvent, type EventMode } from '../../hooks/usePublicEvent'
 import { useDocumentTitle } from '../../hooks/usePage'
 import { accentFor, accentStyle } from '../../lib/accent'
 import { ApiClientError, errorMessage } from '../../lib/api'
-import { formatEventSchedule, formatFullDate, formatPlacesLeft, formatPrice } from '../../lib/format'
+import { formatEventSchedule, formatFullDate, formatPlacesLeft, formatPrice, upcomingDoorPrice } from '../../lib/format'
 import { fr } from '../../lib/fr'
 import { eventPath, invitePath } from '../../lib/links'
 
@@ -39,27 +38,10 @@ function Gauge({ event }: { event: PublicEvent }) {
   if (!event.showRemaining) {
     return event.remaining <= 0 ? <p className="text-sm font-semibold text-bad">{fr.event.full}</p> : null
   }
-  const taken = event.capacity - event.remaining
-  const pct = Math.min(100, Math.round((taken / event.capacity) * 100))
   return (
-    <div>
-      <div className="mb-1.5 flex items-baseline justify-between text-sm">
-        <span className="font-semibold">
-          {event.remaining <= 0 ? fr.event.full : formatPlacesLeft(event.remaining)}
-        </span>
-        <span className="text-ink-muted">sur {event.capacity}</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label="Places réservées"
-        aria-valuemin={0}
-        aria-valuemax={event.capacity}
-        aria-valuenow={taken}
-        className="h-2.5 overflow-hidden rounded-full bg-line"
-      >
-        <div className={cx('h-full rounded-full bg-brand transition-all duration-700', event.remaining <= 0 && 'bg-bad')} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <p className={event.remaining <= 0 ? 'text-sm font-semibold text-bad' : 'text-sm font-semibold'}>
+      {event.remaining <= 0 ? fr.event.full : formatPlacesLeft(event.remaining)}
+    </p>
   )
 }
 
@@ -82,6 +64,7 @@ export default function EventPage({ mode }: { mode: EventMode }) {
   const reserveHref = bookingPath(event, mode, mode === 'invite' ? param : undefined)
   const shareText = `${event.title} — ${formatEventSchedule(event.startsAt, event.endsAt)}, ${event.location}. Réserve ta place : ${window.location.href}`
 
+  const doorNotice = upcomingDoorPrice(event)
   const cta = blocked ? (
     <Button size="lg" fullWidth disabled>{fr.event.reserve}</Button>
   ) : (
@@ -126,7 +109,10 @@ export default function EventPage({ mode }: { mode: EventMode }) {
                   {event.location}
                   {event.address && <span className="block text-sm font-normal text-ink-soft"><AddressLink address={event.address} /></span>}
                 </Fact>
-                <Fact icon="💶" label="Prix par place">{formatPrice(event.priceCents)}</Fact>
+                <Fact icon="💶" label="Prix par place">
+                  {formatPrice(event.priceCents)}
+                  {doorNotice && <span className="block text-sm font-normal text-ink-soft">Puis {doorNotice}</span>}
+                </Fact>
                 {event.bookingDeadline && <Fact icon="⏳" label="Réserver avant le">{formatFullDate(event.bookingDeadline)}</Fact>}
               </ul>
               <Gauge event={event} />
